@@ -1,6 +1,30 @@
-import { Loader2, RefreshCw } from 'lucide-react'
+import { useState } from 'react'
+import { Check, Crosshair, Loader2, RefreshCw } from 'lucide-react'
 import type { MatchPlayer } from '@shared/types'
 import { useApp } from '../store'
+
+function CrosshairButton({ code }: { code: string }): JSX.Element {
+  const [copied, setCopied] = useState(false)
+  const copy = async (): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(code)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      /* clipboard unavailable */
+    }
+  }
+  return (
+    <button
+      onClick={() => void copy()}
+      title={copied ? 'Kopyalandı!' : `Nişangah kodunu kopyala: ${code}`}
+      className={`flex items-center gap-1 rounded p-1 text-xs transition-colors ${copied ? 'text-emerald-400' : 'text-val-mute hover:text-val-text'}`}
+    >
+      {copied ? <Check size={15} /> : <Crosshair size={15} />}
+      {copied && <span>Kopyalandı!</span>}
+    </button>
+  )
+}
 
 function PlayerCard({ p }: { p: MatchPlayer }): JSX.Element {
   return (
@@ -18,6 +42,7 @@ function PlayerCard({ p }: { p: MatchPlayer }): JSX.Element {
           </div>
           <div className="text-xs text-val-mute">{p.agentName}</div>
         </div>
+        {p.crosshairCode && <CrosshairButton code={p.crosshairCode} />}
         {p.mmr && (
           <div className="ml-auto flex shrink-0 items-center gap-2">
             <div className="text-right leading-tight">

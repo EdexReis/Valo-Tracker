@@ -8,10 +8,22 @@ import type { MmrService } from './MmrService'
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const SCAN_COOLDOWN_MS = 8000
 
+/** Finds a crosshair share code anywhere in a loadout entry (the field name is not documented). */
+function findCrosshair(node: any, depth = 0): string | null {
+  if (!node || typeof node !== 'object' || depth > 4) return null
+  for (const [k, v] of Object.entries(node)) {
+    if (/crosshair|profilecode/i.test(k) && typeof v === 'string' && v.trim()) return v.trim()
+    const nested = findCrosshair(v, depth + 1)
+    if (nested) return nested
+  }
+  return null
+}
+
 export class CoreGameService {
   private last: MatchSnapshot | null = null
   private scanning: Promise<MatchSnapshot | null> | null = null
   private lastScanAt = 0
+  private crosshairLogged = false
 
   constructor(
     private auth: AuthService,
@@ -64,7 +76,7 @@ export class CoreGameService {
       const loadoutById = new Map<string, any>()
       for (const entry of loadouts.Loadouts ?? []) {
         const l = entry.Loadout ?? entry
-        if (l?.Subject) loadoutById.set(l.Subject, l)
+        if (l?.Subject) loadoutById.set(l.Subject, entry)
       }
 
       const players: MatchPlayer[] = match.Players.map((p) => {
@@ -81,7 +93,8 @@ export class CoreGameService {
           agentName: agent?.name ?? '?',
           agentIcon: agent?.icon ?? null,
           mmr: mmrById[id] ?? null,
-          weapons: this.resolveWeapons(loadoutById.get(id))
+          crosshairCode: findCrosshair(loadoutById.get(id)),
+          weapons: this.resolveWeapons(loadoutById.get(id)?.Loadout ?? loadoutById.get(id))
         }
       }).sort((a, b) => a.teamId.localeCompare(b.teamId))
 
@@ -92,6 +105,11 @@ export class CoreGameService {
         mapSplash: map?.splash ?? null,
         players,
         scannedAt: Date.now()
+      }
+      if (!this.crosshairLogged) {
+        this.crosshairLogged = true
+        const n = players.filter((p) => p.crosshairCode).length
+        log('CoreGame', 'info', n ? `Nişangah kodu ${n} oyuncuda bulundu` : 'Loadout verisinde nişangah kodu yok (Riot bu alanı vermiyor olabilir)')
       }
       this.last = snapshot
       this.lastScanAt = Date.now()

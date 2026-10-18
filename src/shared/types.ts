@@ -55,6 +55,8 @@ export interface PlayerMmr {
 
 export interface MatchPlayer {
   mmr: PlayerMmr | null
+  /** Crosshair share code when the loadout response carries one */
+  crosshairCode: string | null
   puuid: string
   name: string
   tag: string

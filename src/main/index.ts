@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, globalShortcut, ipcMain, shell } from 'electron'
 import type { AppStatus, InstalockSettings, TelegramInput, WindowAction } from '@shared/types'
 import { IPC } from '@shared/ipc'
 import { getLogHistory, log, logBus } from './logger'
@@ -13,6 +13,7 @@ import { MatchService } from './services/MatchService'
 import { TiltGuardService } from './services/TiltGuardService'
 import { TelegramService } from './services/TelegramService'
 import { DiscordRPCService } from './services/DiscordRPCService'
+import { OverlayWindowManager } from './overlayWindowManager'
 import { startUpdater } from './services/UpdateService'
 import { MmrService } from './services/MmrService'
 import { CoreGameService } from './services/CoreGameService'
@@ -38,6 +39,7 @@ function createWindow(): void {
       sandbox: true
     }
   })
+  win.on('closed', () => app.quit()) // the hidden overlay window must not keep the app alive
   win.once('ready-to-show', () => win?.show())
   win.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url)
@@ -52,6 +54,8 @@ function wire(): void {
   const assets = new AssetCacheService()
   const settings = new SettingsService()
   const ws = new WebSocketService(auth)
+  const overlay = new OverlayWindowManager()
+  overlay.create(path.join(__dirname, '../preload/index.js'))
   const rpc = new DiscordRPCService()
   const title = (s: string): string =>
     s.toLocaleLowerCase('tr-TR').replace(/(^|\s)(\S)/g, (_m, sp: string, c: string) => sp + c.toLocaleUpperCase('tr-TR'))
@@ -63,6 +67,7 @@ function wire(): void {
   )
   const core = new CoreGameService(auth, assets, mmr, (m) => {
     send(IPC.evMatch, m)
+    overlay.send(IPC.evMatch, m)
     if (!m) return
     // Keep the start time stable across re-scans of the same match.
     if (matchStart?.id !== m.matchId) matchStart = { id: m.matchId, ts: Date.now() }
@@ -100,6 +105,7 @@ function wire(): void {
     else if (s === 'PREGAME') rpc.updatePresence({ details: 'Ajan Seçimi', state: 'Ajan kilitleniyor...' })
     else if (s === 'INGAME') rpc.updatePresence({ details: 'Maçta', state: 'Maç yükleniyor...' })
     else rpc.clear()
+    overlay.setGameActive(s === 'INGAME')
     if (s !== 'PREGAME') pregame.clearWarning()
     if (s === 'PREGAME') void pregame.handle()
     else if (s === 'INGAME') void core.scan()
@@ -141,6 +147,8 @@ function wire(): void {
   app.on('before-quit', () => {
     ws.stop()
     rpc.destroy()
+    overlay.destroy()
+    globalShortcut.unregisterAll()
   })
 }
 
