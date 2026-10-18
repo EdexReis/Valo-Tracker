@@ -3,7 +3,7 @@ import type { VtsComponent, VtsGrade, VtsResult } from '@shared/types'
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 /** Bump when the formula changes: stored matches with an older version are recalculated. */
-export const VTS_VERSION = 2
+export const VTS_VERSION = 3
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v))
 const pts = (v: number): number => Math.round(clamp(v, 0, 100))

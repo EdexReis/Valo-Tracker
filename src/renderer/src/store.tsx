@@ -48,7 +48,13 @@ export function AppProvider({ children }: { children: ReactNode }): JSX.Element 
     breakReminders: true,
     breakAfterHours: 3,
     nativeNotifications: true,
-    instalockRiskAck: false
+    instalockRiskAck: false,
+    telegramCommands: true,
+    weeklyReport: true,
+    goalWeeklyMatches: 10,
+    goalWeeklyWins: 5,
+    goalAvgVts: 500,
+    goalHsPercent: 25
   })
   const [lastCoach, setLastCoach] = useState<CoachEvent | null>(null)
   const [stage, setStage] = useState<PregameStage | null>(null)

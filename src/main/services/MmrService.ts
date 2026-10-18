@@ -1,4 +1,4 @@
-import type { PlayerMmr } from '@shared/types'
+import type { PlayerMmr, SeasonRank } from '@shared/types'
 import { REGION } from '../constants'
 import type { AuthService } from './AuthService'
 import type { AssetCacheService } from './AssetCacheService'
@@ -16,6 +16,33 @@ export class MmrService {
     private auth: AuthService,
     private assets: AssetCacheService
   ) {}
+
+  /** Final rank and games for every past competitive act, newest first. */
+  async getSeasonHistory(puuid: string): Promise<SeasonRank[]> {
+    await this.assets.load()
+    const res = await this.auth.remote<{
+      QueueSkills?: { competitive?: { SeasonalInfoBySeasonID?: Record<string, { CompetitiveTier?: number; Rank?: number; NumberOfGames?: number; NumberOfWins?: number }> | null } }
+    }>('GET', `${REGION.pd}/mmr/v1/players/${puuid}`)
+    const seasons = res.QueueSkills?.competitive?.SeasonalInfoBySeasonID ?? {}
+    return Object.entries(seasons)
+      .map(([id, s]) => {
+        const tier = s.CompetitiveTier || s.Rank || 0
+        const info = this.assets.tier(tier)
+        return {
+          seasonId: id,
+          name: this.assets.season(id)?.name ?? 'Bilinmeyen sezon',
+          start: this.assets.season(id)?.start ?? 0,
+          tier,
+          tierName: info.name,
+          tierIcon: info.icon,
+          games: s.NumberOfGames ?? 0,
+          wins: s.NumberOfWins ?? 0
+        }
+      })
+      .filter((s) => s.tier > 0 && s.games > 0)
+      .sort((a, b) => b.start - a.start)
+      .map(({ start: _start, ...rest }) => rest)
+  }
 
   /** Fetches rank data for every puuid in parallel. A failed lookup yields an unranked entry. */
   async getMany(puuids: string[]): Promise<Record<string, PlayerMmr>> {

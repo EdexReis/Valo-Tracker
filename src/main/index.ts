@@ -29,6 +29,8 @@ import { TelegramService } from './services/TelegramService'
 import { NotifyService } from './services/NotifyService'
 import { WishlistService } from './services/WishlistService'
 import { CrosshairService } from './services/CrosshairService'
+import { StoreArchiveService } from './services/StoreArchiveService'
+import { WeeklyReportService } from './services/WeeklyReportService'
 import { SessionMonitorService } from './services/SessionMonitorService'
 import { DiscordRPCService } from './services/DiscordRPCService'
 import { OverlayWindowManager } from './overlayWindowManager'
@@ -147,6 +149,8 @@ function wire(): void {
   const notify = new NotifyService(settings, telegram)
   const wishlist = new WishlistService(assets, storefront, notify)
   const crosshairs = new CrosshairService()
+  const archive = new StoreArchiveService(assets)
+  storefront.onFetched = (d) => archive.record(auth.puuid, d)
   const coach = new LocalAICoachService()
   const tilt = new TiltGuardService(
     auth,
@@ -155,9 +159,54 @@ function wire(): void {
     (puuid, tier, rr) => history.addRR(puuid, tier, rr)
   )
   const monitor = new SessionMonitorService(auth, history, notify, settings, tilt)
+  const weekly = new WeeklyReportService(auth, history, notify, settings)
   const status = (): AppStatus => ({ connection: ws.connection, gameState: currentState, puuid: auth.puuid })
   let currentState: AppStatus['gameState'] = 'UNKNOWN'
   const pushStatus = (): void => send(IPC.evStatus, status())
+
+  // ---- Telegram commands (answered only for the saved chat)
+  const stateLabel: Record<AppStatus['gameState'], string> = {
+    MENUS: 'Lobide',
+    PREGAME: 'Ajan seçiminde',
+    INGAME: 'Maçta',
+    UNKNOWN: 'Bilinmiyor'
+  }
+  const requireAccount = (): string => {
+    if (!auth.puuid) throw new Error('Valorant kapalı')
+    return auth.puuid
+  }
+  telegram.setHandlers({
+    yardim: async () => 'Komutlar:\n/durum · /rank · /magaza · /son · /oturum · /hafta',
+    durum: async () =>
+      ws.connection === 'connected' ? `Durum: ${stateLabel[currentState]}\nOturum RR: ${tilt.state.ready ? tilt.state.delta : '—'}` : 'Valorant kapalı veya giriş yapılmamış.',
+    rank: async () => {
+      const id = requireAccount()
+      const m = (await mmr.getMany([id]))[id]
+      return `Rank: ${title(m.currentTierName)}${m.currentTier > 0 ? ` - ${m.currentRR} RR` : ''}\nTepe: ${title(m.peakTierName)}`
+    },
+    magaza: async () => {
+      requireAccount()
+      const s = await storefront.get()
+      const line = (o: (typeof s.dailyOffers)[number]): string => {
+        const price = o.discountedCost ?? o.cost
+        return `• ${o.name}${price ? ` — ${price} VP` : ''}${o.discountPercent ? ` (-%${o.discountPercent})` : ''}`
+      }
+      const parts = ['🛒 Günlük mağaza', ...s.dailyOffers.map(line)]
+      if (s.nightMarket) parts.push('', '🌙 Gece Pazarı', ...s.nightMarket.offers.map(line))
+      return parts.join('\n')
+    },
+    son: async () => {
+      const id = auth.puuid ?? history.lastPuuid
+      const last = id ? history.matches(id)[0] : undefined
+      if (!last) return 'Kayıtlı maç yok.'
+      const res = { win: 'Galibiyet', loss: 'Mağlubiyet', draw: 'Berabere' }[last.result]
+      return `Son maç: ${last.mapName} · ${last.agentName}\n${res} ${last.roundsWon}-${last.roundsLost} · ${last.kills}/${last.deaths}/${last.assists} · ACS ${last.acs}${
+        last.vts ? `\nVTS ${last.vts.score} (${last.vts.grade})` : ''
+      }${typeof last.rrChange === 'number' ? `\nRR: ${last.rrChange > 0 ? '+' : ''}${last.rrChange}` : ''}`
+    },
+    oturum: async () => `Oturum RR: ${tilt.state.ready ? tilt.state.delta : '—'}\nSüre: ${monitor.sessionHours().toFixed(1)} saat`,
+    hafta: async () => weekly.report(false)
+  })
 
   // ---- user settings -> runtime
   const sanitizeApp = (s: AppSettings): AppSettings => ({
@@ -254,6 +303,7 @@ function wire(): void {
   ipcMain.handle(IPC.saveAppSettings, (_e, s: AppSettings) => {
     const saved = settings.saveApp(sanitizeApp(s))
     applyApp(saved)
+    telegram.refreshListener()
     return saved
   })
   ipcMain.handle(IPC.getMatch, () => core.current)
@@ -294,8 +344,16 @@ function wire(): void {
       return { ok: false, error: (e as Error).message }
     }
   })
+  ipcMain.handle(IPC.getSeasonHistory, () => mmr.getSeasonHistory(requireAccount()))
+  ipcMain.handle(IPC.getStoreArchive, () => archive.list(account()))
+  ipcMain.handle(IPC.getMatchDetail, (_e, id: string) => matches.getMatchDetail(String(id)))
+  ipcMain.handle(IPC.getWeeklyReport, (_e, send: boolean) => weekly.report(!!send))
   ipcMain.handle(IPC.getTelegram, () => settings.getTelegramView())
-  ipcMain.handle(IPC.saveTelegram, (_e, input: TelegramInput) => settings.saveTelegram(input))
+  ipcMain.handle(IPC.saveTelegram, (_e, input: TelegramInput) => {
+    const view = settings.saveTelegram(input)
+    telegram.refreshListener()
+    return view
+  })
   ipcMain.handle(IPC.testTelegram, (_e, input: TelegramInput) => telegram.test(input))
   ipcMain.handle(IPC.getAICoaching, (_e, mode: CoachMode) => runCoach(mode === 'trend' ? 'trend' : 'last'))
   ipcMain.handle(IPC.getCompWarning, () => pregame.compWarning)
@@ -317,6 +375,8 @@ function wire(): void {
   ws.start()
   rpc.start()
   monitor.start()
+  weekly.start()
+  telegram.refreshListener()
   // Store rotates daily: re-check the wishlist twice an hour while connected.
   setInterval(() => {
     if (ws.connection === 'connected') void wishlist.checkAndNotify().catch(() => undefined)
@@ -326,6 +386,8 @@ function wire(): void {
     quitting = true
     ws.stop()
     monitor.stop()
+    weekly.stop()
+    telegram.stop()
     rpc.destroy()
     overlay.destroy()
     globalShortcut.unregisterAll()

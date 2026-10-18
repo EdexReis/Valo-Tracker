@@ -31,6 +31,10 @@ export class SessionMonitorService {
     this.startedAt = Date.now()
   }
 
+  sessionHours(): number {
+    return (Date.now() - this.startedAt) / 3_600_000
+  }
+
   start(): void {
     this.timer ??= setInterval(() => void this.evaluate(), CHECK_INTERVAL_MS)
   }

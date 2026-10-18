@@ -1,7 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Download, Loader2 } from 'lucide-react'
-import type { RRPoint, StatsPayload } from '@shared/types'
-import { groupStats, isRankedLike, totals, type GroupStat } from '@shared/stats'
+import { Award, Download, Loader2, Send, Target, TrendingUp } from 'lucide-react'
+import type { RRPoint, SeasonRank, StatsPayload } from '@shared/types'
+import {
+  computeBadges,
+  groupStats,
+  isRankedLike,
+  projectRank,
+  totals,
+  weeklyProgress,
+  type GroupStat
+} from '@shared/stats'
+import { useApp } from '../store'
+import Heatmap from '../components/Heatmap'
 
 type Filter = 'ranked' | 'all'
 
@@ -14,10 +24,21 @@ function Kpi({ label, value }: { label: string; value: string | number }): JSX.E
   )
 }
 
-function GroupTable({ title, rows, label }: { title: string; rows: GroupStat[]; label: string }): JSX.Element {
+function Card({ title, icon, children }: { title: string; icon?: JSX.Element; children: React.ReactNode }): JSX.Element {
   return (
     <section className="rounded border border-val-line bg-val-panel p-4">
-      <h2 className="mb-3 text-sm font-bold uppercase tracking-widest text-val-mute">{title}</h2>
+      <h2 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-val-mute">
+        {icon}
+        {title}
+      </h2>
+      {children}
+    </section>
+  )
+}
+
+function GroupTable({ title, rows, label }: { title: string; rows: GroupStat[]; label: string }): JSX.Element {
+  return (
+    <Card title={title}>
       <table className="w-full text-sm tabular-nums">
         <thead>
           <tr className="text-left text-[11px] uppercase tracking-widest text-val-mute">
@@ -45,7 +66,7 @@ function GroupTable({ title, rows, label }: { title: string; rows: GroupStat[]; 
           ))}
         </tbody>
       </table>
-    </section>
+    </Card>
   )
 }
 
@@ -69,12 +90,174 @@ function RRChart({ points }: { points: RRPoint[] }): JSX.Element {
       </svg>
       <div className="flex justify-between text-xs text-val-mute">
         <span>{new Date(pts[0].t).toLocaleDateString('tr-TR')}</span>
-        <span>
-          Düşük {min % 100} RR · Yüksek {max % 100} RR (kademe değişimleri dahil)
-        </span>
+        <span>Düşük {min % 100} RR · Yüksek {max % 100} RR (kademe değişimleri dahil)</span>
         <span>{new Date(pts[pts.length - 1].t).toLocaleDateString('tr-TR')}</span>
       </div>
     </div>
+  )
+}
+
+function GoalsCard({ matches }: { matches: StatsPayload['matches'] }): JSX.Element {
+  const { appSettings: s, updateApp } = useApp()
+  const goals = { weeklyMatches: s.goalWeeklyMatches, weeklyWins: s.goalWeeklyWins, avgVts: s.goalAvgVts, hsPercent: s.goalHsPercent }
+  const progress = weeklyProgress(matches, goals)
+  const setters: Record<string, (n: number) => void> = {
+    matches: (n) => updateApp({ goalWeeklyMatches: n }),
+    wins: (n) => updateApp({ goalWeeklyWins: n }),
+    vts: (n) => updateApp({ goalAvgVts: n }),
+    hs: (n) => updateApp({ goalHsPercent: n })
+  }
+  return (
+    <Card title="Haftalık hedefler (son 7 gün)" icon={<Target size={15} />}>
+      <div className="grid gap-4 md:grid-cols-2">
+        {progress.map((g) => (
+          <div key={g.key}>
+            <div className="flex items-center justify-between text-sm">
+              <span className="font-semibold">
+                {g.label} {g.done && <span className="text-emerald-400">✓</span>}
+              </span>
+              <span className="flex items-center gap-1.5 tabular-nums text-val-mute">
+                {g.current} /
+                <input
+                  type="number"
+                  min={1}
+                  value={g.target}
+                  onChange={(e) => setters[g.key](Math.max(1, Number(e.target.value) || 1))}
+                  className="w-16 rounded border border-val-line bg-val-bg px-1.5 py-0.5 text-right text-sm outline-none focus:border-val-red"
+                  aria-label={`${g.label} hedefi`}
+                />
+                {g.unit}
+              </span>
+            </div>
+            <div className="mt-1 h-1.5 overflow-hidden rounded bg-val-raised">
+              <div className={`h-full ${g.done ? 'bg-emerald-400' : 'bg-val-red'}`} style={{ width: `${Math.min(100, (g.current / g.target) * 100)}%` }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  )
+}
+
+function BadgesCard({ matches }: { matches: StatsPayload['matches'] }): JSX.Element {
+  const badges = useMemo(() => computeBadges(matches), [matches])
+  return (
+    <Card title="Rozetler" icon={<Award size={15} />}>
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        {badges.map((b) => (
+          <div key={b.key} className={`rounded border p-3 ${b.unlocked ? 'border-amber-400/60 bg-amber-400/10' : 'border-val-line opacity-50'}`}>
+            <div className="text-sm font-bold">{b.unlocked ? '🏅' : '🔒'} {b.label}</div>
+            <div className="text-[11px] text-val-mute">{b.description}</div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  )
+}
+
+function ProjectionCard({ matches, rr }: { matches: StatsPayload['matches']; rr: RRPoint[] }): JSX.Element {
+  const current = rr[rr.length - 1]
+  const p = current && current.tier > 0 ? projectRank(matches, current.rr) : null
+  return (
+    <Card title="Rank tahmini" icon={<TrendingUp size={15} />}>
+      {!p || !current ? (
+        <p className="text-sm text-val-mute">Tahmin için en az 5 Rekabetçi maç ve hem galibiyet hem mağlubiyet kaydı gerekir.</p>
+      ) : (
+        <div className="space-y-1.5 text-sm">
+          <p>
+            Son {p.sample} Rekabetçi maç: galibiyette ort. <span className="font-bold text-emerald-400">+{p.avgWin}</span>, mağlubiyette ort.{' '}
+            <span className="font-bold text-val-red">{p.avgLoss}</span> RR, kazanma %{p.winRate}.
+          </p>
+          <p>
+            Maç başına beklenen: <span className="font-bold">{p.expectedPerMatch > 0 ? '+' : ''}{p.expectedPerMatch} RR</span>.
+          </p>
+          <p className="font-semibold">
+            {p.matchesToNext !== null
+              ? `Bu gidişle bir üst kademeye yaklaşık ${p.matchesToNext} maç (şu an ${current.rr} RR).`
+              : 'Mevcut trend RR kaybettiriyor; kademe atlamak için kazanma oranını yükseltmek gerek.'}
+          </p>
+          <p className="text-[11px] text-val-mute">Basit bir tahmindir; Immortal ve üstü kademelerde RR kuralları farklı olabilir.</p>
+        </div>
+      )}
+    </Card>
+  )
+}
+
+function SeasonCard(): JSX.Element {
+  const [rows, setRows] = useState<SeasonRank[] | null>(null)
+  const [failed, setFailed] = useState(false)
+  useEffect(() => {
+    window.api.getSeasonHistory().then(setRows, () => setFailed(true))
+  }, [])
+  return (
+    <Card title="Sezon geçmişi">
+      {failed && <p className="text-sm text-val-mute">Sezon verisi için Valorant'a bağlı olmalısın.</p>}
+      {!failed && !rows && <p className="text-sm text-val-mute">Yükleniyor…</p>}
+      {rows && rows.length === 0 && <p className="text-sm text-val-mute">Kayıtlı sezon yok.</p>}
+      {rows && rows.length > 0 && (
+        <table className="w-full text-sm tabular-nums">
+          <thead>
+            <tr className="text-left text-[11px] uppercase tracking-widest text-val-mute">
+              <th className="pb-2">Sezon</th>
+              <th>Rank</th>
+              <th>Maç</th>
+              <th>Win %</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((s) => (
+              <tr key={s.seasonId} className="border-t border-val-line">
+                <td className="py-1.5 font-semibold">{s.name}</td>
+                <td className="flex items-center gap-2 py-1.5">
+                  {s.tierIcon && <img src={s.tierIcon} alt="" className="h-6 w-6" />}
+                  {s.tierName}
+                </td>
+                <td>{s.games}</td>
+                <td>{s.games ? Math.round((s.wins / s.games) * 100) : 0}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </Card>
+  )
+}
+
+function HeatmapCard({ matches }: { matches: StatsPayload['matches'] }): JSX.Element {
+  const { assets } = useApp()
+  const names = useMemo(() => [...new Set(matches.filter((m) => m.deathPts?.length || m.killPts?.length).map((m) => m.mapName))].sort(), [matches])
+  const [map, setMap] = useState('')
+  const current = map && names.includes(map) ? map : (names[0] ?? '')
+  const onMap = matches.filter((m) => m.mapName === current)
+  const deaths = onMap.flatMap((m) => m.deathPts ?? [])
+  const kills = onMap.flatMap((m) => m.killPts ?? [])
+  const minimap = assets.maps.find((m) => m.name === current)?.minimap ?? null
+  return (
+    <Card title="Isı haritası (tüm maçların)">
+      {names.length === 0 ? (
+        <p className="text-sm text-val-mute">Konum verisi yeni maçlardan itibaren birikir (son 20 maç bağlanınca otomatik eklenir).</p>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-[220px_1fr]">
+          <div className="space-y-2">
+            <select
+              value={current}
+              onChange={(e) => setMap(e.target.value)}
+              className="w-full rounded border border-val-line bg-val-bg px-2 py-1.5 text-sm outline-none focus:border-val-red"
+            >
+              {names.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-val-mute">{onMap.length} maç. Kırmızı yoğunlukların, en sık öldüğün noktalar.</p>
+          </div>
+          <div className="max-w-md">
+            <Heatmap minimap={minimap} deaths={deaths} kills={kills} />
+          </div>
+        </div>
+      )}
+    </Card>
   )
 }
 
@@ -82,6 +265,7 @@ export default function StatsPage(): JSX.Element {
   const [data, setData] = useState<StatsPayload | null>(null)
   const [filter, setFilter] = useState<Filter>('ranked')
   const [note, setNote] = useState<string | null>(null)
+  const [report, setReport] = useState<string | null>(null)
 
   const load = useCallback(() => void window.api.getStats().then(setData), [])
   useEffect(load, [load])
@@ -96,6 +280,11 @@ export default function StatsPage(): JSX.Element {
     setNote(r.ok ? `Kaydedildi: ${r.path}` : r.error === 'İptal edildi.' ? null : `Hata: ${r.error}`)
   }
 
+  const showReport = async (send: boolean): Promise<void> => {
+    setReport(await window.api.getWeeklyReport(send))
+    if (send) setNote('Rapor bildirim olarak gönderildi.')
+  }
+
   if (!data) {
     return (
       <p className="flex items-center gap-2 text-sm text-val-mute">
@@ -104,6 +293,8 @@ export default function StatsPage(): JSX.Element {
     )
   }
 
+  const btn = 'flex items-center gap-1.5 rounded border border-val-line px-3 py-1.5 text-sm font-semibold hover:bg-val-raised'
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -111,7 +302,7 @@ export default function StatsPage(): JSX.Element {
           <h1 className="text-xl font-bold">İstatistik</h1>
           <p className="text-sm text-val-mute">Bu bilgisayarda biriken {data.matches.length} maç. Veriler dışarı gönderilmez.</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <select
             value={filter}
             onChange={(e) => setFilter(e.target.value as Filter)}
@@ -120,15 +311,22 @@ export default function StatsPage(): JSX.Element {
             <option value="ranked">Rekabetçi + Derecesiz</option>
             <option value="all">Tüm modlar</option>
           </select>
-          <button onClick={() => void doExport('csv')} className="flex items-center gap-1.5 rounded border border-val-line px-3 py-1.5 text-sm font-semibold hover:bg-val-raised">
+          <button onClick={() => void showReport(false)} className={btn}>
+            Haftalık rapor
+          </button>
+          <button onClick={() => void showReport(true)} className={btn}>
+            <Send size={14} /> Bildirim olarak gönder
+          </button>
+          <button onClick={() => void doExport('csv')} className={btn}>
             <Download size={14} /> CSV
           </button>
-          <button onClick={() => void doExport('json')} className="flex items-center gap-1.5 rounded border border-val-line px-3 py-1.5 text-sm font-semibold hover:bg-val-raised">
+          <button onClick={() => void doExport('json')} className={btn}>
             <Download size={14} /> JSON
           </button>
         </div>
       </div>
       {note && <p className="select-text text-sm text-val-mute">{note}</p>}
+      {report && <pre className="select-text whitespace-pre-wrap rounded border border-val-line bg-val-panel p-4 text-sm">{report}</pre>}
 
       {matches.length === 0 ? (
         <p className="rounded border border-dashed border-val-line p-10 text-center text-sm text-val-mute">
@@ -147,15 +345,23 @@ export default function StatsPage(): JSX.Element {
             <Kpi label="FB/FD raund" value={`${t.firstBloodRate}/${t.firstDeathRate}`} />
           </div>
 
-          <section className="rounded border border-val-line bg-val-panel p-4">
-            <h2 className="mb-3 text-sm font-bold uppercase tracking-widest text-val-mute">RR geçmişi</h2>
-            <RRChart points={data.rr} />
-          </section>
+          <GoalsCard matches={data.matches} />
+
+          <div className="grid gap-5 xl:grid-cols-[2fr_1fr]">
+            <Card title="RR geçmişi">
+              <RRChart points={data.rr} />
+            </Card>
+            <ProjectionCard matches={data.matches} rr={data.rr} />
+          </div>
 
           <div className="grid gap-5 xl:grid-cols-2">
             <GroupTable title="Ajanlar" rows={agents} label="Ajan" />
             <GroupTable title="Haritalar" rows={maps} label="Harita" />
           </div>
+
+          <HeatmapCard matches={matches} />
+          <SeasonCard />
+          <BadgesCard matches={data.matches} />
         </>
       )}
     </div>

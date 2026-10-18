@@ -17,7 +17,13 @@ export const APP_DEFAULTS: AppSettings = {
   breakReminders: true,
   breakAfterHours: 3,
   nativeNotifications: true,
-  instalockRiskAck: false
+  instalockRiskAck: false,
+  telegramCommands: true,
+  weeklyReport: true,
+  goalWeeklyMatches: 10,
+  goalWeeklyWins: 5,
+  goalAvgVts: 500,
+  goalHsPercent: 25
 }
 
 interface TelegramStored {

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { ChevronDown, Loader2, RefreshCw } from 'lucide-react'
 import type { MatchSummary, VtsResult } from '@shared/types'
 import { useApp } from '../store'
+import MatchDetailPanel from '../components/MatchDetailPanel'
 
 const GRADE_COLOR = {
   S: 'bg-amber-400/20 text-amber-300',
@@ -53,6 +54,7 @@ export default function HistoryPage(): JSX.Element {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [open, setOpen] = useState<string | null>(null)
+  const [detail, setDetail] = useState<string | null>(null)
   const connected = status.connection === 'connected'
 
   const load = useCallback(async () => {
@@ -95,9 +97,10 @@ export default function HistoryPage(): JSX.Element {
         {list?.map((m) => {
           const s = STYLE[m.result]
           const expanded = open === m.matchId && !!m.vts?.components
+          const showDetail = detail === m.matchId
           return (
             <div key={m.matchId}>
-              <div className={`flex items-center gap-4 border border-l-4 border-val-line bg-val-panel p-3 ${s.bar} ${expanded ? 'rounded-t' : 'rounded'}`}>
+              <div className={`flex items-center gap-4 border border-l-4 border-val-line bg-val-panel p-3 ${s.bar} ${expanded || showDetail ? 'rounded-t' : 'rounded'}`}>
                 {m.agentIcon ? (
                   <img src={m.agentIcon} alt={m.agentName} className="h-11 w-11 rounded bg-val-raised" />
                 ) : (
@@ -131,11 +134,24 @@ export default function HistoryPage(): JSX.Element {
                     {m.vts.components && <ChevronDown size={13} className={expanded ? 'rotate-180' : ''} />}
                   </button>
                 )}
+                {typeof m.rrChange === 'number' && m.queueId === 'competitive' && (
+                  <span className={`text-xs font-bold tabular-nums ${m.rrChange >= 0 ? 'text-emerald-400' : 'text-val-red'}`}>
+                    {m.rrChange > 0 ? '+' : ''}
+                    {m.rrChange} RR
+                  </span>
+                )}
+                <button
+                  onClick={() => setDetail(showDetail ? null : m.matchId)}
+                  className="rounded border border-val-line px-2 py-1 text-xs font-semibold text-val-mute hover:bg-val-raised hover:text-val-text"
+                >
+                  Detay
+                </button>
                 <div className={`${m.vts ? '' : 'ml-auto '}text-xs text-val-mute`}>
                   {new Date(m.startMillis).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' })}
                 </div>
               </div>
               {expanded && m.vts && <Breakdown vts={m.vts} />}
+              {showDetail && <MatchDetailPanel matchId={m.matchId} />}
             </div>
           )
         })}

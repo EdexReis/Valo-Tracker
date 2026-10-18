@@ -15,12 +15,23 @@ export interface AgentInfo {
   role: string
 }
 
+/** Converts game coordinates to minimap fractions: x = gameY * xm + xa, y = gameX * ym + ya. */
+export interface MapCalib {
+  xm: number
+  ym: number
+  xa: number
+  ya: number
+}
+
 export interface MapInfo {
   uuid: string
   mapUrl: string
   name: string
   splash: string | null
   icon: string | null
+  /** top-down minimap image */
+  minimap: string | null
+  calib: MapCalib | null
 }
 
 export interface AssetsPayload {
@@ -150,6 +161,11 @@ export interface MatchSummary {
   hsPercent: number
   firstBloods: number
   firstDeaths: number
+  /** RR gained or lost in this match (competitive only) */
+  rrChange?: number | null
+  /** where the player died / got kills, as minimap fractions 0-1 */
+  deathPts?: Pt[]
+  killPts?: Pt[]
 }
 
 export interface SessionRR {
@@ -204,6 +220,64 @@ export interface LogEntry {
   message: string
 }
 
+export interface Pt {
+  x: number
+  y: number
+}
+
+export interface RoundInfo {
+  /** 1-based */
+  round: number
+  won: boolean
+  kills: number
+  deathSec: number | null
+  killerAgent: string | null
+  econ: { value: number; teamAvg: number; type: 'pistol' | 'eco' | 'force' | 'full' } | null
+  flag: 'underbuy' | 'overbuy' | null
+}
+
+export interface EconSummary {
+  pistol: { rounds: number; won: number }
+  eco: { rounds: number; won: number }
+  force: { rounds: number; won: number }
+  full: { rounds: number; won: number }
+  underbuys: number
+  overbuys: number
+}
+
+export interface MatchDetail {
+  matchId: string
+  mapName: string
+  mapIcon: string | null
+  rounds: RoundInfo[]
+  deaths: Pt[]
+  kills: Pt[]
+  econ: EconSummary | null
+}
+
+export interface SeasonRank {
+  seasonId: string
+  name: string
+  tier: number
+  tierName: string
+  tierIcon: string | null
+  games: number
+  wins: number
+}
+
+export interface StoreSkinDay extends SkinHit {
+  cost: number | null
+  discountedCost: number | null
+  discountPercent: number | null
+}
+
+export interface StoreDay {
+  /** YYYY-MM-DD (UTC) of the rotation start */
+  date: string
+  daily: StoreSkinDay[]
+  night: StoreSkinDay[]
+}
+
 export type RegionKey = 'eu' | 'na' | 'latam' | 'br' | 'ap' | 'kr'
 
 export interface AppSettings {
@@ -221,6 +295,14 @@ export interface AppSettings {
   nativeNotifications: boolean
   /** the user confirmed the ban-risk warning for the instalocker */
   instalockRiskAck: boolean
+  /** answer /rank, /magaza... commands sent from the saved Telegram chat */
+  telegramCommands: boolean
+  /** send a weekly summary on Sunday evening */
+  weeklyReport: boolean
+  goalWeeklyMatches: number
+  goalWeeklyWins: number
+  goalAvgVts: number
+  goalHsPercent: number
 }
 
 export interface RRPoint {
@@ -304,6 +386,11 @@ export interface ValoApi {
   getOwnHistory(): Promise<MatchSummary[]>
   getStats(): Promise<StatsPayload>
   exportHistory(format: 'csv' | 'json'): Promise<ExportResult>
+  getSeasonHistory(): Promise<SeasonRank[]>
+  getStoreArchive(): Promise<StoreDay[]>
+  getMatchDetail(matchId: string): Promise<MatchDetail>
+  /** Builds the weekly report text; with send=true it is also pushed to notifications. */
+  getWeeklyReport(send: boolean): Promise<string>
   getSessionRR(): Promise<SessionRR>
   getTelegram(): Promise<TelegramSettingsView>
   saveTelegram(input: TelegramInput): Promise<TelegramSettingsView>

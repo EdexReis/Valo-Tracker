@@ -74,6 +74,12 @@ function GeneralPanel(): JSX.Element {
       <Row title="Windows bildirimleri" hint="Wishlist, mola ve AI koç bildirimleri Windows'ta da gösterilir.">
         <Toggle on={s.nativeNotifications} onChange={(v) => updateApp({ nativeNotifications: v })} label="Bildirimler" />
       </Row>
+      <Row title="Haftalık rapor" hint="Pazar akşamı 20:00'den sonra haftalık özet bildirimi gönderir.">
+        <Toggle on={s.weeklyReport} onChange={(v) => updateApp({ weeklyReport: v })} label="Haftalık rapor" />
+      </Row>
+      <Row title="Telegram komutları" hint="Kayıtlı sohbetten /rank, /magaza, /son, /oturum, /hafta, /durum yazınca bot yanıtlar.">
+        <Toggle on={s.telegramCommands} onChange={(v) => updateApp({ telegramCommands: v })} label="Telegram komutları" />
+      </Row>
       <Row title="Mola hatırlatıcı" hint="3 maç üst üste kayıp, -50 RR ve uzun oturum için bildirim.">
         <div className="flex items-center gap-3">
           <label className="flex items-center gap-1.5 text-xs text-val-mute">

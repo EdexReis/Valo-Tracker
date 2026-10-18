@@ -1,4 +1,4 @@
-import type { MatchSummary, VtsResult } from '@shared/types'
+import type { EconSummary, MatchDetail, MatchSummary, Pt, RoundInfo, RRPoint, VtsResult } from '@shared/types'
 import { buildTrend, isRankedLike } from '@shared/stats'
 import { REGION } from '../constants'
 import type { AuthService } from './AuthService'
@@ -98,6 +98,21 @@ export class MatchService {
     }
     const duels = openingDuels(d, puuid)
 
+    // Where I died / got kills, as minimap fractions (for the heatmaps).
+    const mapUrl: string = d.matchInfo?.mapId ?? ''
+    const deathPts: Pt[] = []
+    const killPts: Pt[] = []
+    for (const k of Array.isArray(d.kills) ? d.kills : []) {
+      if (k.victim === puuid && k.victimLocation) {
+        const p = this.assets.toMinimap(mapUrl, k.victimLocation.x, k.victimLocation.y)
+        if (p) deathPts.push(p)
+      } else if (k.killer === puuid) {
+        const loc = (k.playerLocations ?? []).find((pl: any) => pl.subject === puuid)?.location
+        const p = loc ? this.assets.toMinimap(mapUrl, loc.x, loc.y) : null
+        if (p) killPts.push(p)
+      }
+    }
+
     return {
       vts: computeVTS(d, puuid, agent?.role ?? ''),
       matchId,
@@ -118,7 +133,9 @@ export class MatchService {
       adr: Math.round(damage / rounds),
       hsPercent: shots ? Math.round((head / shots) * 100) : 0,
       firstBloods: duels.firstBloods,
-      firstDeaths: duels.firstDeaths
+      firstDeaths: duels.firstDeaths,
+      deathPts: deathPts.slice(0, 40),
+      killPts: killPts.slice(0, 60)
     }
   }
 
@@ -156,7 +173,110 @@ export class MatchService {
       if (r.status === 'fulfilled') ok.push(r.value)
       else this.staleFailed.add(ids[i].matchId)
     })
-    return this.history.upsert(puuid, ok)
+    const added = this.history.upsert(puuid, ok)
+    await this.syncRR(puuid).catch(() => undefined)
+    return added
+  }
+
+  /** RR gained or lost per competitive match, plus a backfilled rank timeline. */
+  private async syncRR(puuid: string): Promise<void> {
+    const res = await this.auth.remote<{ Matches?: any[] }>(
+      'GET',
+      `${REGION.pd}/mmr/v1/players/${puuid}/competitiveupdates?startIndex=0&endIndex=20&queue=competitive`
+    )
+    const changes = new Map<string, number>()
+    const points: RRPoint[] = []
+    for (const u of res.Matches ?? []) {
+      const earned =
+        typeof u.RankedRatingEarned === 'number' ? u.RankedRatingEarned : (u.RankedRatingAfterUpdate ?? 0) - (u.RankedRatingBeforeUpdate ?? 0)
+      changes.set(u.MatchID, earned)
+      if (u.MatchStartTime && u.TierAfterUpdate > 0) {
+        points.push({ t: u.MatchStartTime, tier: u.TierAfterUpdate, rr: u.RankedRatingAfterUpdate ?? 0 })
+      }
+    }
+    this.history.patchRR(puuid, changes)
+    this.history.mergeRR(puuid, points)
+  }
+
+  /** Round-by-round view of one finished match: kills, deaths, economy and heatmap points. */
+  async getMatchDetail(matchId: string): Promise<MatchDetail> {
+    const puuid = this.auth.puuid
+    if (!puuid) throw new Error('Riot Client oturumu yok')
+    await this.assets.load()
+    const d = await this.rawDetails(matchId)
+    const players: any[] = d.players ?? []
+    const me = players.find((p) => p.subject === puuid)
+    if (!me) throw new Error('Oyuncu maç verisinde yok')
+    const mapUrl: string = d.matchInfo?.mapId ?? ''
+    const map = this.assets.mapByMapUrl(mapUrl)
+    const mateIds = players.filter((p) => p.teamId === me.teamId).map((p) => p.subject as string)
+    const kills: any[] = Array.isArray(d.kills) ? d.kills : []
+    const agentOf = (id: string): string | null => this.assets.agent(players.find((p) => p.subject === id)?.characterId ?? '')?.name ?? null
+
+    const empty = (): { rounds: number; won: number } => ({ rounds: 0, won: 0 })
+    const econ: EconSummary = { pistol: empty(), eco: empty(), force: empty(), full: empty(), underbuys: 0, overbuys: 0 }
+    let hasEcon = false
+
+    const rounds: RoundInfo[] = (d.roundResults ?? []).map((rr: any): RoundInfo => {
+      const n: number = rr.roundNum
+      const ks = kills.filter((k) => k.round === n)
+      const death = ks.find((k) => k.victim === puuid)
+      const won = rr.winningTeam === me.teamId
+      const mine = (rr.playerStats ?? []).find((x: any) => x.subject === puuid)
+      const value: number | undefined = mine?.economy?.loadoutValue
+      let info: RoundInfo['econ'] = null
+      let flag: RoundInfo['flag'] = null
+      if (typeof value === 'number') {
+        const teamVals = (rr.playerStats ?? [])
+          .filter((x: any) => mateIds.includes(x.subject))
+          .map((x: any) => x.economy?.loadoutValue)
+          .filter((v: unknown): v is number => typeof v === 'number')
+        const teamAvg = teamVals.length ? Math.round(teamVals.reduce((a: number, b: number) => a + b, 0) / teamVals.length) : value
+        // Rough buy classes from the loadout value at round start.
+        const type = n === 0 || n === 12 ? 'pistol' : value < 1500 ? 'eco' : value < 3400 ? 'force' : 'full'
+        info = { value, teamAvg, type }
+        if (type !== 'pistol') {
+          if (teamAvg >= 3400 && value < 2500) flag = 'underbuy'
+          else if (teamAvg < 1500 && value >= 3400) flag = 'overbuy'
+        }
+        hasEcon = true
+        econ[type].rounds++
+        if (won) econ[type].won++
+        if (flag === 'underbuy') econ.underbuys++
+        if (flag === 'overbuy') econ.overbuys++
+      }
+      return {
+        round: n + 1,
+        won,
+        kills: ks.filter((k) => k.killer === puuid).length,
+        deathSec: death ? Math.round((death.roundTime ?? 0) / 1000) : null,
+        killerAgent: death ? agentOf(death.killer) : null,
+        econ: info,
+        flag
+      }
+    })
+
+    const deaths: Pt[] = []
+    const killPts: Pt[] = []
+    for (const k of kills) {
+      if (k.victim === puuid && k.victimLocation) {
+        const p = this.assets.toMinimap(mapUrl, k.victimLocation.x, k.victimLocation.y)
+        if (p) deaths.push(p)
+      } else if (k.killer === puuid) {
+        const loc = (k.playerLocations ?? []).find((pl: any) => pl.subject === puuid)?.location
+        const p = loc ? this.assets.toMinimap(mapUrl, loc.x, loc.y) : null
+        if (p) killPts.push(p)
+      }
+    }
+    return {
+      matchId,
+      mapName: map?.name ?? 'Bilinmeyen Harita',
+      mapIcon: map?.minimap ?? null,
+      rounds,
+      deaths,
+      kills: killPts,
+      econ: hasEcon ? econ : null
+    }
   }
 
   /** Synced local history, newest first. */

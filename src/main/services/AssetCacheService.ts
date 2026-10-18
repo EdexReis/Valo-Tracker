@@ -1,7 +1,7 @@
 import path from 'node:path'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { app } from 'electron'
-import type { AgentInfo, AssetsPayload, MapInfo } from '@shared/types'
+import type { AgentInfo, AssetsPayload, MapInfo, Pt } from '@shared/types'
 import { log } from '../logger'
 
 interface SlimSkin {
@@ -24,8 +24,15 @@ export interface TierInfo {
   icon: string | null
 }
 
+export interface SeasonInfo {
+  uuid: string
+  name: string
+  start: number
+}
+
 interface CacheFile {
   savedAt: number
+  seasons: SeasonInfo[]
   activeSeasonId: string | null
   tiers: TierInfo[]
   agents: AgentInfo[]
@@ -56,6 +63,7 @@ export class AssetCacheService {
   private buddyByLevel = new Map<string, SlimBuddy>()
   private tierByNum = new Map<number, TierInfo>()
   private activeSeason: string | null = null
+  private seasonById = new Map<string, SeasonInfo>()
   private loading: Promise<void> | null = null
   private ready = false
 
@@ -73,7 +81,7 @@ export class AssetCacheService {
     } catch {
       /* no cache */
     }
-    if (!cache || !cache.tiers || cache.agents.some((a) => a.role === undefined) || Date.now() - cache.savedAt > TTL_MS) {
+    if (!cache || !cache.tiers || cache.agents.some((a) => a.role === undefined) || !cache.seasons || cache.maps.some((m) => m.calib === undefined) || Date.now() - cache.savedAt > TTL_MS) {
       try {
         cache = await this.fetchAll()
         try {
@@ -107,6 +115,16 @@ export class AssetCacheService {
     const latestTiers: any[] = tierSets[tierSets.length - 1]?.tiers ?? []
     return {
       savedAt: Date.now(),
+      seasons: seasons
+        .filter((s) => s.type === 'EAresSeasonType::Act')
+        .map((s) => {
+          const episode = seasons.find((e) => e.uuid === s.parentUuid)
+          return {
+            uuid: s.uuid as string,
+            name: `${episode?.displayName ?? ''} ${s.displayName}`.trim(),
+            start: Date.parse(s.startTime) || 0
+          }
+        }),
       activeSeasonId: activeAct?.uuid ?? null,
       tiers: latestTiers.map((t) => ({ tier: t.tier, name: t.tierName, icon: t.largeIcon ?? t.smallIcon ?? null })),
       agents: agents.map((a) => ({ uuid: a.uuid, name: a.displayName, icon: a.displayIcon, role: a.role?.displayName ?? '' })),
@@ -115,7 +133,12 @@ export class AssetCacheService {
         mapUrl: m.mapUrl,
         name: m.displayName,
         splash: m.splash ?? null,
-        icon: m.listViewIcon ?? m.displayIcon ?? null
+        icon: m.listViewIcon ?? m.displayIcon ?? null,
+        minimap: m.displayIcon ?? null,
+        calib:
+          typeof m.xMultiplier === 'number'
+            ? { xm: m.xMultiplier, ym: m.yMultiplier, xa: m.xScalarToAdd, ya: m.yScalarToAdd }
+            : null
       })),
       skins: skins.map((s) => ({
         uuid: s.uuid,
@@ -138,6 +161,7 @@ export class AssetCacheService {
     this.agentById = new Map(c.agents.map((a) => [a.uuid, a]))
     this.mapByUrl = new Map(c.maps.map((m) => [m.mapUrl, m]))
     this.activeSeason = c.activeSeasonId
+    this.seasonById = new Map(c.seasons.map((s) => [s.uuid, s]))
     this.tierByNum = new Map(c.tiers.map((t) => [t.tier, t]))
     this.skinList = c.skins
     this.skinByKey.clear()
@@ -157,6 +181,20 @@ export class AssetCacheService {
       // playable maps only (those with a map URL under /Game/Maps and a splash)
       maps: this.maps.filter((m) => m.splash && m.mapUrl.startsWith('/Game/Maps/')).sort((a, b) => a.name.localeCompare(b.name))
     }
+  }
+
+  season(uuid: string): SeasonInfo | undefined {
+    return this.seasonById.get(uuid)
+  }
+
+  /** Game coordinates -> minimap fractions (0-1). Null when the map has no calibration. */
+  toMinimap(mapUrl: string, gx: number, gy: number): Pt | null {
+    const c = this.mapByUrl.get(mapUrl)?.calib
+    if (!c || typeof gx !== 'number' || typeof gy !== 'number') return null
+    const x = gy * c.xm + c.xa
+    const y = gx * c.ym + c.ya
+    if (x < -0.05 || x > 1.05 || y < -0.05 || y > 1.05) return null
+    return { x: Math.round(x * 1000) / 1000, y: Math.round(y * 1000) / 1000 }
   }
 
   get activeSeasonId(): string | null {

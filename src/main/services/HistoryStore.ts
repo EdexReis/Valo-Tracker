@@ -12,6 +12,8 @@ interface FileShape {
   accounts: Record<string, PerAccount>
   /** last signed-in account, so stats stay viewable while Valorant is closed */
   last: string | null
+  /** ISO week of the last weekly report */
+  reportWeek?: string
 }
 
 const MAX_MATCHES = 2000
@@ -45,6 +47,44 @@ export class HistoryStore {
 
   get lastPuuid(): string | null {
     return this.data.last
+  }
+
+  get reportWeek(): string | undefined {
+    return this.data.reportWeek
+  }
+
+  setReportWeek(week: string): void {
+    this.data.reportWeek = week
+    this.save()
+  }
+
+  /** Stores the RR gained or lost per match (matchId -> RR). */
+  patchRR(puuid: string, changes: Map<string, number>): void {
+    const b = this.bucket(puuid)
+    let dirty = false
+    for (const m of b.matches) {
+      const c = changes.get(m.matchId)
+      if (c !== undefined && m.rrChange !== c) {
+        m.rrChange = c
+        dirty = true
+      }
+    }
+    if (dirty) this.save()
+  }
+
+  /** Merges rank samples (e.g. from Riot's competitive updates) into the RR timeline. */
+  mergeRR(puuid: string, points: RRPoint[]): void {
+    if (!points.length) return
+    const b = this.bucket(puuid)
+    const sorted = [...b.rr, ...points].sort((a, c) => a.t - c.t)
+    const out: RRPoint[] = []
+    for (const p of sorted) {
+      const last = out[out.length - 1]
+      if (last && last.tier === p.tier && last.rr === p.rr) continue
+      out.push(p)
+    }
+    b.rr = out.slice(-MAX_RR)
+    this.save()
   }
 
   setLast(puuid: string): void {

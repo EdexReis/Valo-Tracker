@@ -21,6 +21,9 @@ const firstValue = (o: Record<string, number> | undefined): number | null => {
 }
 
 export class StorefrontService {
+  /** Called with every successfully fetched storefront (used by the archive). */
+  onFetched: ((d: StorefrontData) => void) | null = null
+
   private priceCache: { at: number; map: Map<string, number> } | null = null
 
   constructor(
@@ -107,7 +110,7 @@ export class StorefrontService {
       const s = this.assets.resolveSkin(id)
       return { id, name: s.name, icon: s.icon }
     }
-    return {
+    const data: StorefrontData = {
       dailyOffers: raw.dailyOffers.map((id) => ({ ...skin(id), cost: prices.get(id) ?? null })),
       dailyRemainingSec: raw.dailyRemainingSec,
       nightMarket: raw.nightMarket && {
@@ -121,5 +124,7 @@ export class StorefrontService {
         }))
       }
     }
+    this.onFetched?.(data)
+    return data
   }
 }

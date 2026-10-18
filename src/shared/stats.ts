@@ -113,3 +113,152 @@ export function buildTrend(newestFirst: MatchSummary[]): Record<string, unknown>
     vtsOldestToNewest: [...newestFirst].reverse().map((m) => m.vts?.score ?? null)
   }
 }
+
+// ---------------------------------------------------------------------------
+// Weekly report, goals, badges and rank projection
+// ---------------------------------------------------------------------------
+
+const DAY_MS = 86_400_000
+
+/** ISO week key such as 2026-W42, used to send the weekly report once per week. */
+export function isoWeekKey(date: Date): string {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
+  const day = d.getUTCDay() || 7
+  d.setUTCDate(d.getUTCDate() + 4 - day)
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1))
+  const week = Math.ceil(((d.getTime() - yearStart.getTime()) / DAY_MS + 1) / 7)
+  return `${d.getUTCFullYear()}-W${String(week).padStart(2, '0')}`
+}
+
+/** Ranked/unrated matches of the last 7 days, newest first. */
+export function lastWeek(matches: MatchSummary[], now = Date.now()): MatchSummary[] {
+  return matches.filter((m) => isRankedLike(m) && m.startMillis >= now - 7 * DAY_MS)
+}
+
+export function buildWeeklyReport(allMatches: MatchSummary[], now = Date.now()): string {
+  const ms = lastWeek(allMatches, now)
+  if (!ms.length) return '📊 Haftalık Rapor\nBu hafta Rekabetçi/Derecesiz maç oynamadın.'
+  const t = totals(ms)
+  const wins = ms.filter((m) => m.result === 'win').length
+  const losses = ms.filter((m) => m.result === 'loss').length
+  const rr = ms.reduce((n, m) => n + (m.rrChange ?? 0), 0)
+  const agents = groupStats(ms, (m) => m.agentName).filter((g) => g.games >= 2)
+  const maps = groupStats(ms, (m) => m.mapName).filter((g) => g.games >= 2)
+  const bestAgent = [...agents].sort((a, b) => b.winRate - a.winRate || b.games - a.games)[0]
+  const worstMap = [...maps].sort((a, b) => a.winRate - b.winRate || b.games - a.games)[0]
+  const lines = [
+    '📊 Haftalık Rapor',
+    `Maç: ${t.games} (${wins}G - ${losses}M), kazanma %${t.winRate}`,
+    `K/D ${t.kd.toFixed(2)} · ACS ${t.acs} · ADR ${t.adr} · HS %${t.hsPercent} · VTS ${t.vts}`,
+    `RR değişimi: ${rr > 0 ? '+' : ''}${rr}`
+  ]
+  if (bestAgent) lines.push(`En iyi ajan: ${bestAgent.key} (%${bestAgent.winRate}, ${bestAgent.games} maç)`)
+  if (worstMap && worstMap.winRate < 50) lines.push(`Zorlandığın harita: ${worstMap.key} (%${worstMap.winRate}, ${worstMap.games} maç)`)
+  return lines.join('\n')
+}
+
+export interface GoalTargets {
+  weeklyMatches: number
+  weeklyWins: number
+  avgVts: number
+  hsPercent: number
+}
+
+export interface GoalProgress {
+  key: string
+  label: string
+  current: number
+  target: number
+  unit: string
+  done: boolean
+}
+
+export function weeklyProgress(matches: MatchSummary[], goals: GoalTargets, now = Date.now()): GoalProgress[] {
+  const ms = lastWeek(matches, now)
+  const t = totals(ms)
+  const wins = ms.filter((m) => m.result === 'win').length
+  const mk = (key: string, label: string, current: number, target: number, unit: string): GoalProgress => ({
+    key,
+    label,
+    current,
+    target,
+    unit,
+    done: current >= target
+  })
+  return [
+    mk('matches', 'Haftalık maç', ms.length, goals.weeklyMatches, 'maç'),
+    mk('wins', 'Haftalık galibiyet', wins, goals.weeklyWins, 'galibiyet'),
+    mk('vts', 'Ortalama VTS', t.vts, goals.avgVts, 'puan'),
+    mk('hs', 'Kafa isabeti', t.hsPercent, goals.hsPercent, '%')
+  ]
+}
+
+export interface Badge {
+  key: string
+  label: string
+  description: string
+  unlocked: boolean
+}
+
+/** Achievements computed from the stored match history. */
+export function computeBadges(matches: MatchSummary[]): Badge[] {
+  const oldestFirst = [...matches].sort((a, b) => a.startMillis - b.startMillis)
+  let bestWinStreak = 0
+  let streak = 0
+  let comeback = false
+  let lossRun = 0
+  for (const m of oldestFirst) {
+    if (m.result === 'win') {
+      streak++
+      if (lossRun >= 3) comeback = true
+      lossRun = 0
+    } else if (m.result === 'loss') {
+      bestWinStreak = Math.max(bestWinStreak, streak)
+      streak = 0
+      lossRun++
+    }
+  }
+  bestWinStreak = Math.max(bestWinStreak, streak)
+  const any = (f: (m: MatchSummary) => boolean): boolean => matches.some(f)
+  return [
+    { key: 's', label: 'S Sınıfı', description: 'Bir maçta VTS 800 üstü', unlocked: any((m) => (m.vts?.score ?? 0) >= 800) },
+    { key: 'ace', label: 'Ace', description: 'Bir raundda 5 kill', unlocked: any((m) => (m.vts?.multiKills?.k5 ?? 0) > 0) },
+    { key: 'clutch', label: 'Clutch Ustası', description: 'Tek maçta 3 clutch', unlocked: any((m) => (m.vts?.clutches ?? 0) >= 3) },
+    { key: 'hs', label: 'Kafa Avcısı', description: 'Bir maçta %40+ kafa isabeti', unlocked: any((m) => m.hsPercent >= 40) },
+    { key: 'streak', label: 'Seri', description: '5 maç üst üste galibiyet', unlocked: bestWinStreak >= 5 },
+    { key: 'comeback', label: 'Tilt Kırıcı', description: '3 kayıptan sonra galibiyet', unlocked: comeback },
+    { key: 'fb', label: 'Açılış Ustası', description: 'Bir maçta 8+ ilk kan', unlocked: any((m) => m.firstBloods >= 8) },
+    { key: '100', label: '100 Maç', description: 'Kayıtlı 100 maç', unlocked: matches.length >= 100 }
+  ]
+}
+
+export interface RankProjection {
+  /** RR gained per win / lost per loss, averaged over recent competitive games */
+  avgWin: number
+  avgLoss: number
+  winRate: number
+  expectedPerMatch: number
+  /** matches until the next tier, or null when the trend is not positive */
+  matchesToNext: number | null
+  sample: number
+}
+
+/** Estimates how many ranked matches are needed to reach the next tier at the current trend. */
+export function projectRank(newestFirst: MatchSummary[], currentRR: number): RankProjection | null {
+  const comp = newestFirst.filter((m) => m.queueId === 'competitive' && typeof m.rrChange === 'number').slice(0, 20)
+  const wins = comp.filter((m) => (m.rrChange as number) > 0)
+  const losses = comp.filter((m) => (m.rrChange as number) < 0)
+  if (comp.length < 5 || !wins.length || !losses.length) return null
+  const avgWin = wins.reduce((n, m) => n + (m.rrChange as number), 0) / wins.length
+  const avgLoss = losses.reduce((n, m) => n + (m.rrChange as number), 0) / losses.length
+  const winRate = wins.length / comp.length
+  const expected = winRate * avgWin + (1 - winRate) * avgLoss
+  return {
+    avgWin: Math.round(avgWin),
+    avgLoss: Math.round(avgLoss),
+    winRate: Math.round(winRate * 100),
+    expectedPerMatch: Math.round(expected * 10) / 10,
+    matchesToNext: expected > 0 ? Math.ceil((100 - currentRR) / expected) : null,
+    sample: comp.length
+  }
+}

@@ -10,7 +10,55 @@ export class TelegramService {
   private bot: TelegramBot | null = null
   private botToken = ''
 
+  private listener: TelegramBot | null = null
+  private listenerToken = ''
+  private handlers: Record<string, () => Promise<string>> = {}
+  private lastPollError = 0
+
   constructor(private settings: SettingsService) {}
+
+  setHandlers(handlers: Record<string, () => Promise<string>>): void {
+    this.handlers = handlers
+  }
+
+  /**
+   * (Re)starts command polling. Only messages from the saved chat id are answered, so strangers
+   * who find the bot cannot read the player's data.
+   */
+  refreshListener(): void {
+    const { botToken, chatId } = this.settings.getTelegram()
+    const want = this.settings.getApp().telegramCommands && !!botToken && !!chatId
+    if (this.listener && (!want || this.listenerToken !== botToken)) this.stop()
+    if (!want || this.listener) return
+
+    const bot = new TelegramBot(botToken, { polling: true })
+    this.listener = bot
+    this.listenerToken = botToken
+    bot.setMyCommands(Object.keys(this.handlers).map((c) => ({ command: c, description: `/${c}` }))).catch(() => undefined)
+    bot.on('polling_error', (e) => {
+      // Throttle: a missing network would otherwise flood the log.
+      if (Date.now() - this.lastPollError < 60_000) return
+      this.lastPollError = Date.now()
+      log('Telegram', 'error', `Komut dinleyici hatası: ${String(e.message).split(botToken).join('***')}`)
+    })
+    bot.on('message', (msg) => {
+      if (String(msg.chat.id) !== chatId || !msg.text?.startsWith('/')) return
+      const cmd = msg.text.slice(1).split(/[\s@]/)[0].toLowerCase()
+      const handler = this.handlers[cmd]
+      if (!handler) return
+      handler()
+        .catch(() => 'Bu bilgi şu an alınamadı. Valorant açık ve giriş yapılmış mı?')
+        .then((text) => bot.sendMessage(chatId, text))
+        .catch(() => undefined)
+    })
+  }
+
+  stop(): void {
+    const bot = this.listener
+    this.listener = null
+    this.listenerToken = ''
+    if (bot) void bot.stopPolling().catch(() => undefined)
+  }
 
   private getBot(token: string): TelegramBot {
     // No polling: we only send messages.
