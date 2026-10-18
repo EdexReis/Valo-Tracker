@@ -1,8 +1,10 @@
-import { Zap } from 'lucide-react'
+import { useState } from 'react'
+import { ShieldAlert, Zap } from 'lucide-react'
 import { useApp } from '../store'
 
 export default function InstalockPage(): JSX.Element {
-  const { assets, settings, updateSettings, triggerPregame, status } = useApp()
+  const { assets, settings, updateSettings, triggerPregame, status, appSettings, updateApp } = useApp()
+  const [confirming, setConfirming] = useState(false)
 
   const setMapAgent = (mapUuid: string, agentUuid: string): void => {
     const next = { ...settings.agentByMap }
@@ -42,7 +44,10 @@ export default function InstalockPage(): JSX.Element {
           <button
             role="switch"
             aria-checked={settings.enabled}
-            onClick={() => updateSettings({ enabled: !settings.enabled })}
+            onClick={() => {
+              if (!settings.enabled && !appSettings.instalockRiskAck) setConfirming(true)
+              else updateSettings({ enabled: !settings.enabled })
+            }}
             className={`flex items-center gap-2 rounded px-4 py-2 text-sm font-bold ${
               settings.enabled ? 'bg-val-red text-white' : 'bg-val-raised text-val-mute'
             }`}
@@ -50,6 +55,33 @@ export default function InstalockPage(): JSX.Element {
             Instalock {settings.enabled ? 'Aktif' : 'Kapalı'}
           </button>
         </div>
+      </div>
+
+      <div className="rounded border border-orange-500/50 bg-orange-500/10 p-4 text-sm">
+        <p className="flex items-start gap-2">
+          <ShieldAlert size={18} className="mt-0.5 shrink-0 text-orange-400" />
+          <span>
+            <span className="font-semibold">Hesap riski:</span> Riot, ajan seçimini otomatikleştiren araçlara (instalock) geçici veya kalıcı ceza verdiğini bildirmiştir. Bu özelliği
+            önermiyoruz; kullanırsan sorumluluk sana aittir.
+          </span>
+        </p>
+        {(confirming || (settings.enabled && !appSettings.instalockRiskAck)) && (
+          <div className="mt-3 flex items-center gap-3">
+            <button
+              onClick={() => {
+                updateApp({ instalockRiskAck: true })
+                updateSettings({ enabled: true })
+                setConfirming(false)
+              }}
+              className="rounded bg-val-red px-3 py-1.5 text-xs font-bold hover:opacity-90"
+            >
+              Riski anlıyorum, etkinleştir
+            </button>
+            <button onClick={() => setConfirming(false)} className="rounded border border-val-line px-3 py-1.5 text-xs font-semibold hover:bg-val-raised">
+              Vazgeç
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="rounded border border-val-line bg-val-panel p-4">

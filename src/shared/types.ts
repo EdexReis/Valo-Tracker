@@ -121,6 +121,15 @@ export interface MatchSummary {
   result: 'win' | 'loss' | 'draw'
   roundsWon: number
   roundsLost: number
+  /** raw queue id, e.g. competitive / unrated */
+  queueId: string
+  rounds: number
+  acs: number
+  /** average damage per round */
+  adr: number
+  hsPercent: number
+  firstBloods: number
+  firstDeaths: number
 }
 
 export interface SessionRR {
@@ -175,6 +184,84 @@ export interface LogEntry {
   message: string
 }
 
+export type RegionKey = 'eu' | 'na' | 'latam' | 'br' | 'ap' | 'kr'
+
+export interface AppSettings {
+  startWithWindows: boolean
+  minimizeToTray: boolean
+  discordRpc: boolean
+  overlayEnabled: boolean
+  /** Electron accelerator, e.g. CommandOrControl+Tab */
+  overlayShortcut: string
+  dodgeAssistant: boolean
+  region: RegionKey
+  autoCoach: boolean
+  breakReminders: boolean
+  breakAfterHours: number
+  nativeNotifications: boolean
+  /** the user confirmed the ban-risk warning for the instalocker */
+  instalockRiskAck: boolean
+}
+
+export interface RRPoint {
+  t: number
+  tier: number
+  rr: number
+}
+
+export interface StatsPayload {
+  matches: MatchSummary[]
+  rr: RRPoint[]
+}
+
+export interface ExportResult {
+  ok: boolean
+  path?: string
+  error?: string
+}
+
+export interface SkinHit {
+  uuid: string
+  name: string
+  icon: string | null
+}
+
+export interface WishlistHit extends SkinHit {
+  where: 'daily' | 'night'
+  cost: number | null
+  discountedCost: number | null
+  discountPercent: number | null
+}
+
+export interface CollectionItem extends SkinHit {
+  cost: number | null
+}
+
+export interface CollectionData {
+  count: number
+  /** sum of known store prices (VP): an estimate, older skins have no price */
+  totalVP: number
+  items: CollectionItem[]
+}
+
+export interface SavedCrosshair {
+  id: string
+  name: string
+  code: string
+}
+
+export interface PregameStage {
+  mapName: string
+  agentName: string | null
+}
+
+export type CoachMode = 'last' | 'trend'
+
+export interface CoachEvent {
+  mode: CoachMode
+  result: CoachResult
+}
+
 export type WindowAction = 'minimize' | 'maximize' | 'close'
 
 export interface ValoApi {
@@ -182,20 +269,35 @@ export interface ValoApi {
   getAssets(): Promise<AssetsPayload>
   getSettings(): Promise<InstalockSettings>
   saveSettings(settings: InstalockSettings): Promise<InstalockSettings>
+  getAppSettings(): Promise<AppSettings>
+  saveAppSettings(settings: AppSettings): Promise<AppSettings>
   getMatch(): Promise<MatchSnapshot | null>
   scanMatch(): Promise<MatchSnapshot | null>
   triggerPregame(): Promise<void>
   getStorefront(): Promise<StorefrontData>
-  getMatchHistory(): Promise<MatchSummary[]>
+  getCollection(): Promise<CollectionData>
+  getWishlist(): Promise<SkinHit[]>
+  searchSkins(query: string): Promise<SkinHit[]>
+  addWish(uuid: string): Promise<SkinHit[]>
+  removeWish(uuid: string): Promise<SkinHit[]>
+  checkWishlist(): Promise<WishlistHit[]>
+  getOwnHistory(): Promise<MatchSummary[]>
+  getStats(): Promise<StatsPayload>
+  exportHistory(format: 'csv' | 'json'): Promise<ExportResult>
   getSessionRR(): Promise<SessionRR>
   getTelegram(): Promise<TelegramSettingsView>
   saveTelegram(input: TelegramInput): Promise<TelegramSettingsView>
   testTelegram(input: TelegramInput): Promise<TelegramResult>
   getCompWarning(): Promise<CompWarning | null>
   onCompWarning(cb: (w: CompWarning | null) => void): () => void
-  getAICoaching(): Promise<CoachResult>
+  getAICoaching(mode: CoachMode): Promise<CoachResult>
+  onCoach(cb: (e: CoachEvent) => void): () => void
   getDodgeWarning(): Promise<DodgeWarning | null>
   onDodgeWarning(cb: (w: DodgeWarning | null) => void): () => void
+  onStage(cb: (s: PregameStage) => void): () => void
+  getCrosshairs(): Promise<SavedCrosshair[]>
+  addCrosshair(input: { name: string; code: string }): Promise<SavedCrosshair[]>
+  removeCrosshair(id: string): Promise<SavedCrosshair[]>
   onSessionRR(cb: (s: SessionRR) => void): () => void
   getLogs(): Promise<LogEntry[]>
   windowAction(action: WindowAction): void

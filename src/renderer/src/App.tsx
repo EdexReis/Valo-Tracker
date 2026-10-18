@@ -4,6 +4,7 @@ import TitleBar from './components/TitleBar'
 import Sidebar from './components/Sidebar'
 import DodgeBanner from './components/DodgeBanner'
 import CompBanner from './components/CompBanner'
+import SuggestBanner from './components/SuggestBanner'
 
 export default function App(): JSX.Element {
   const [active, setActive] = useState(TABS[0].id)
@@ -17,6 +18,7 @@ export default function App(): JSX.Element {
         <main className="min-w-0 flex-1 overflow-y-auto p-6">
           <DodgeBanner />
           <CompBanner />
+          <SuggestBanner />
           <Page />
         </main>
       </div>

@@ -17,7 +17,8 @@ export class TiltGuardService {
   constructor(
     private auth: AuthService,
     private mmr: MmrService,
-    private onUpdate: (s: SessionRR) => void
+    private onUpdate: (s: SessionRR) => void,
+    private onSample: (puuid: string, tier: number, rr: number) => void
   ) {}
 
   get state(): SessionRR {
@@ -33,7 +34,9 @@ export class TiltGuardService {
     const puuid = this.auth.puuid
     if (!puuid) return null
     const m = (await this.mmr.getMany([puuid]))[puuid]
-    return m ? { puuid, value: absoluteRR(m.currentTier, m.currentRR) } : null
+    if (!m) return null
+    this.onSample(puuid, m.currentTier, m.currentRR)
+    return { puuid, value: absoluteRR(m.currentTier, m.currentRR) }
   }
 
   /** Captures the starting RR once per app session (and again if the account changes). */
@@ -54,9 +57,10 @@ export class TiltGuardService {
     }
   }
 
-  /** Called when the player returns to MENUS after a match. */
-  onMatchEnd(): void {
-    setTimeout(() => void this.refresh(), RECHECK_DELAY_MS) // MMR updates a moment after the match ends
+  /** Re-reads the RR after a match. MMR updates a moment after the match ends. */
+  async refreshAfterMatch(): Promise<void> {
+    await new Promise((r) => setTimeout(r, RECHECK_DELAY_MS))
+    await this.refresh()
   }
 
   private async refresh(): Promise<void> {

@@ -49,6 +49,7 @@
     },
     "files": [
       "out/**/*",
+      "resources/**/*",
       "package.json"
     ],
     "asar": true,
@@ -60,7 +61,8 @@
             "x64"
           ]
         }
-      ]
+      ],
+      "icon": "resources/icon.png"
     },
     "nsis": {
       "oneClick": true,

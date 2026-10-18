@@ -1,7 +1,9 @@
 import type { MatchSummary, VtsGrade, VtsResult } from '@shared/types'
+import { buildTrend, isRankedLike } from '@shared/stats'
 import { REGION } from '../constants'
 import type { AuthService } from './AuthService'
 import type { AssetCacheService } from './AssetCacheService'
+import type { HistoryStore } from './HistoryStore'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const QUEUES: Record<string, string> = {
@@ -28,26 +30,29 @@ export function vtsGrade(score: number): VtsGrade {
   return 'D'
 }
 
-/** First-blood count: the earliest kill of every round, credited to its killer. */
-function countFirstBloods(d: any, puuid: string): number {
-  const kills: Array<{ round: number; time: number; killer: string }> = []
+/** First blood / first death: the earliest kill of every round decides both. */
+function openingDuels(d: any, puuid: string): { firstBloods: number; firstDeaths: number } {
+  const kills: Array<{ round: number; time: number; killer: string; victim: string }> = []
   if (Array.isArray(d.kills)) {
-    for (const k of d.kills) kills.push({ round: k.round, time: k.roundTime ?? 0, killer: k.killer })
+    for (const k of d.kills) kills.push({ round: k.round, time: k.roundTime ?? 0, killer: k.killer, victim: k.victim })
   } else {
     for (const r of d.roundResults ?? [])
       for (const ps of r.playerStats ?? [])
-        for (const k of ps.kills ?? []) kills.push({ round: r.roundNum, time: k.timeSinceRoundStartMillis ?? 0, killer: k.killer })
+        for (const k of ps.kills ?? [])
+          kills.push({ round: r.roundNum, time: k.timeSinceRoundStartMillis ?? 0, killer: k.killer, victim: k.victim })
   }
-  const first = new Map<number, { time: number; killer: string }>()
+  const first = new Map<number, (typeof kills)[number]>()
   for (const k of kills) {
     const cur = first.get(k.round)
-    if (!cur || k.time < cur.time) first.set(k.round, { time: k.time, killer: k.killer })
+    if (!cur || k.time < cur.time) first.set(k.round, k)
   }
-  let n = 0
-  first.forEach((f) => {
-    if (f.killer === puuid) n++
+  let firstBloods = 0
+  let firstDeaths = 0
+  first.forEach((k) => {
+    if (k.killer === puuid) firstBloods++
+    if (k.victim === puuid) firstDeaths++
   })
-  return n
+  return { firstBloods, firstDeaths }
 }
 
 export interface CoachData {
@@ -80,10 +85,10 @@ export class MatchService {
 
   constructor(
     private auth: AuthService,
-    private assets: AssetCacheService
+    private assets: AssetCacheService,
+    private history: HistoryStore
   ) {}
 
-  /** Last 10 match IDs (newest first). */
   async getHistoryIds(puuid: string, end = 10): Promise<Array<{ matchId: string; queueId: string }>> {
     const res = await this.auth.remote<{ History?: Array<{ MatchID: string; QueueID?: string }> }>(
       'GET',
@@ -111,7 +116,7 @@ export class MatchService {
 
     // ~0.3 assists/round and ~0.15 first bloods/round earn the full 100 points each.
     const assistPts = clamp((s.assists / rounds / 0.3) * 100, 0, 100)
-    const fbPts = clamp((countFirstBloods(matchDetails, puuid) / rounds / 0.15) * 100, 0, 100)
+    const fbPts = clamp((openingDuels(matchDetails, puuid).firstBloods / rounds / 0.15) * 100, 0, 100)
 
     const score = Math.round(clamp(kdPts + acsPts + assistPts + fbPts, 0, 1000))
     return { score, grade: vtsGrade(score) }
@@ -126,6 +131,96 @@ export class MatchService {
     return d
   }
 
+  /** Parses K/D/A, agent, win/loss and detailed stats for the given player from one match. */
+  async getMatchDetails(matchId: string, puuid: string, queueId = ''): Promise<MatchSummary> {
+    const d = await this.rawDetails(matchId)
+    const me = (d.players ?? []).find((p: any) => p.subject === puuid)
+    if (!me) throw new Error('Oyuncu maç verisinde yok')
+    const teams: any[] = d.teams ?? []
+    const myTeam = teams.find((t) => t.teamId === me.teamId)
+    const other = teams.find((t) => t.teamId !== me.teamId)
+    const result: MatchSummary['result'] = !myTeam || (myTeam.won === false && other?.won === false) ? 'draw' : myTeam.won ? 'win' : 'loss'
+    const agent = this.assets.agent(me.characterId ?? '')
+    const queue = d.matchInfo?.queueID ?? queueId
+    const rounds: number = me.stats?.roundsPlayed || (d.roundResults ?? []).length || 1
+
+    let head = 0
+    let shots = 0
+    let damage = 0
+    for (const r of d.roundResults ?? []) {
+      const ps = (r.playerStats ?? []).find((x: any) => x.subject === puuid)
+      for (const dm of ps?.damage ?? []) {
+        head += dm.headshots ?? 0
+        shots += (dm.headshots ?? 0) + (dm.bodyshots ?? 0) + (dm.legshots ?? 0)
+        damage += dm.damage ?? 0
+      }
+    }
+    const duels = openingDuels(d, puuid)
+
+    return {
+      vts: this.calculateVTS(d, puuid),
+      matchId,
+      startMillis: d.matchInfo?.gameStartMillis ?? 0,
+      queue: QUEUES[queue] ?? queue,
+      queueId: queue,
+      mapName: this.assets.mapByMapUrl(d.matchInfo?.mapId ?? '')?.name ?? 'Bilinmeyen Harita',
+      agentName: agent?.name ?? '?',
+      agentIcon: agent?.icon ?? null,
+      kills: me.stats?.kills ?? 0,
+      deaths: me.stats?.deaths ?? 0,
+      assists: me.stats?.assists ?? 0,
+      result,
+      roundsWon: myTeam?.roundsWon ?? 0,
+      roundsLost: other?.roundsWon ?? 0,
+      rounds,
+      acs: Math.round((me.stats?.score ?? 0) / rounds),
+      adr: Math.round(damage / rounds),
+      hsPercent: shots ? Math.round((head / shots) * 100) : 0,
+      firstBloods: duels.firstBloods,
+      firstDeaths: duels.firstDeaths
+    }
+  }
+
+  /** Recent matches (newest first) of any player. Used for teammates; nothing is stored. */
+  async getMatchHistory(playerPuuid: string, count = 10, queues?: string[]): Promise<MatchSummary[]> {
+    await this.assets.load()
+    // With a queue filter, look further back so `count` matching games can be found.
+    const all = await this.getHistoryIds(playerPuuid, queues ? 20 : count)
+    const ids = (queues ? all.filter((h) => queues.includes(h.queueId)) : all).slice(0, count)
+    const settled = await Promise.allSettled(ids.map((h) => this.getMatchDetails(h.matchId, playerPuuid, h.queueId)))
+    return settled
+      .filter((r): r is PromiseFulfilledResult<MatchSummary> => r.status === 'fulfilled')
+      .map((r) => r.value)
+      .sort((a, b) => b.startMillis - a.startMillis)
+  }
+
+  /** Pulls the player's latest 20 matches into the local store. Returns how many were new. */
+  async syncHistory(): Promise<number> {
+    const puuid = this.auth.puuid
+    if (!puuid) return 0
+    await this.assets.load()
+    const ids = (await this.getHistoryIds(puuid, 20)).filter((h) => !this.history.has(puuid, h.matchId))
+    const settled = await Promise.allSettled(ids.map((h) => this.getMatchDetails(h.matchId, puuid, h.queueId)))
+    const ok = settled.filter((r): r is PromiseFulfilledResult<MatchSummary> => r.status === 'fulfilled').map((r) => r.value)
+    return this.history.add(puuid, ok)
+  }
+
+  /** Synced local history, newest first. */
+  async getOwnHistory(): Promise<MatchSummary[]> {
+    const puuid = this.auth.puuid
+    if (!puuid) throw new Error('Riot Client oturumu yok')
+    await this.syncHistory().catch(() => 0)
+    return this.history.matches(puuid).slice(0, 30)
+  }
+
+  /** Aggregate of the last 20 ranked/unrated matches, for the AI trend report. */
+  getTrendData(): Record<string, unknown> | null {
+    const puuid = this.auth.puuid
+    if (!puuid) return null
+    const recent = this.history.matches(puuid).filter(isRankedLike).slice(0, 20)
+    return recent.length ? buildTrend(recent) : null
+  }
+
   /** Detailed stats of the player's most recent non-deathmatch game, for the AI coach. */
   async getCoachData(): Promise<CoachData | null> {
     const puuid = this.auth.puuid
@@ -134,39 +229,8 @@ export class MatchService {
     const latest = (await this.getHistoryIds(puuid, 10)).find((h) => h.queueId !== 'deathmatch')
     if (!latest) return null
 
-    const [d, summary] = await Promise.all([
-      this.rawDetails(latest.matchId),
-      this.getMatchDetails(latest.matchId, puuid, latest.queueId)
-    ])
-    const me = (d.players ?? []).find((p: any) => p.subject === puuid)
-    const rounds: number = me?.stats?.roundsPlayed || (d.roundResults ?? []).length || 1
-
-    // Opening duels: the earliest kill of each round decides first blood / first death.
+    const [d, s] = await Promise.all([this.rawDetails(latest.matchId), this.getMatchDetails(latest.matchId, puuid, latest.queueId)])
     const kills: any[] = Array.isArray(d.kills) ? d.kills : []
-    const firstKillByRound = new Map<number, any>()
-    for (const k of kills) {
-      const cur = firstKillByRound.get(k.round)
-      if (!cur || (k.roundTime ?? 0) < (cur.roundTime ?? 0)) firstKillByRound.set(k.round, k)
-    }
-    let firstBloods = 0
-    let firstDeaths = 0
-    firstKillByRound.forEach((k) => {
-      if (k.killer === puuid) firstBloods++
-      if (k.victim === puuid) firstDeaths++
-    })
-
-    let head = 0
-    let total = 0
-    let damage = 0
-    for (const r of d.roundResults ?? []) {
-      const ps = (r.playerStats ?? []).find((x: any) => x.subject === puuid)
-      for (const dm of ps?.damage ?? []) {
-        head += dm.headshots ?? 0
-        total += (dm.headshots ?? 0) + (dm.bodyshots ?? 0) + (dm.legshots ?? 0)
-        damage += dm.damage ?? 0
-      }
-    }
-
     const deathLocations = kills
       .filter((k) => k.victim === puuid)
       .slice(0, 25)
@@ -179,68 +243,25 @@ export class MatchService {
 
     const r2 = (n: number): number => Math.round(n * 100) / 100
     return {
-      map: summary.mapName,
-      agent: summary.agentName,
-      queue: summary.queue,
-      result: summary.result,
-      roundsWon: summary.roundsWon,
-      roundsLost: summary.roundsLost,
-      kills: summary.kills,
-      deaths: summary.deaths,
-      assists: summary.assists,
-      kd: r2(summary.kills / Math.max(1, summary.deaths)),
-      acs: Math.round((me?.stats?.score ?? 0) / rounds),
-      adr: Math.round(damage / rounds),
-      headshotPercent: total ? Math.round((head / total) * 100) : 0,
-      firstBloods,
-      firstDeaths,
-      firstBloodRate: r2(firstBloods / rounds),
-      firstDeathRate: r2(firstDeaths / rounds),
-      vts: summary.vts,
+      map: s.mapName,
+      agent: s.agentName,
+      queue: s.queue,
+      result: s.result,
+      roundsWon: s.roundsWon,
+      roundsLost: s.roundsLost,
+      kills: s.kills,
+      deaths: s.deaths,
+      assists: s.assists,
+      kd: r2(s.kills / Math.max(1, s.deaths)),
+      acs: s.acs,
+      adr: s.adr,
+      headshotPercent: s.hsPercent,
+      firstBloods: s.firstBloods,
+      firstDeaths: s.firstDeaths,
+      firstBloodRate: r2(s.firstBloods / s.rounds),
+      firstDeathRate: r2(s.firstDeaths / s.rounds),
+      vts: s.vts,
       deathLocations
     }
-  }
-
-  /** Parses K/D/A, agent and win/loss for the given player from one match. */
-  async getMatchDetails(matchId: string, puuid: string, queueId = ''): Promise<MatchSummary> {
-    const d = await this.rawDetails(matchId)
-    const me = (d.players ?? []).find((p: any) => p.subject === puuid)
-    if (!me) throw new Error('Oyuncu maç verisinde yok')
-    const teams: any[] = d.teams ?? []
-    const myTeam = teams.find((t) => t.teamId === me.teamId)
-    const other = teams.find((t) => t.teamId !== me.teamId)
-    const result: MatchSummary['result'] = !myTeam || (myTeam.won === false && other?.won === false) ? 'draw' : myTeam.won ? 'win' : 'loss'
-    const agent = this.assets.agent(me.characterId ?? '')
-    const queue = d.matchInfo?.queueID ?? queueId
-    return {
-      vts: this.calculateVTS(d, puuid),
-      matchId,
-      startMillis: d.matchInfo?.gameStartMillis ?? 0,
-      queue: QUEUES[queue] ?? queue,
-      mapName: this.assets.mapByMapUrl(d.matchInfo?.mapId ?? '')?.name ?? 'Bilinmeyen Harita',
-      agentName: agent?.name ?? '?',
-      agentIcon: agent?.icon ?? null,
-      kills: me.stats?.kills ?? 0,
-      deaths: me.stats?.deaths ?? 0,
-      assists: me.stats?.assists ?? 0,
-      result,
-      roundsWon: myTeam?.roundsWon ?? 0,
-      roundsLost: other?.roundsWon ?? 0
-    }
-  }
-
-  /** Recent matches (newest first) for the signed-in player, or for `puuid` when given. */
-  async getMatchHistory(playerPuuid?: string, count = 10, queues?: string[]): Promise<MatchSummary[]> {
-    const puuid = playerPuuid ?? this.auth.puuid
-    if (!puuid) throw new Error('Riot Client oturumu yok')
-    await this.assets.load()
-    // With a queue filter, look further back so `count` matching games can be found.
-    const all = await this.getHistoryIds(puuid, queues ? 20 : count)
-    const ids = (queues ? all.filter((h) => queues.includes(h.queueId)) : all).slice(0, count)
-    const settled = await Promise.allSettled(ids.map((h) => this.getMatchDetails(h.matchId, puuid, h.queueId)))
-    return settled
-      .filter((r): r is PromiseFulfilledResult<MatchSummary> => r.status === 'fulfilled')
-      .map((r) => r.value)
-      .sort((a, b) => b.startMillis - a.startMillis)
   }
 }

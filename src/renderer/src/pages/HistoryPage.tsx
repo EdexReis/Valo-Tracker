@@ -28,7 +28,7 @@ export default function HistoryPage(): JSX.Element {
     setLoading(true)
     setError(null)
     try {
-      setList(await window.api.getMatchHistory())
+      setList(await window.api.getOwnHistory())
     } catch {
       setError('Maç geçmişi alınamadı. Valorant açık ve giriş yapılmış olmalı.')
     } finally {
@@ -45,7 +45,7 @@ export default function HistoryPage(): JSX.Element {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold">Kariyer / Geçmiş</h1>
-          <p className="text-sm text-val-mute">Son 10 maç</p>
+          <p className="text-sm text-val-mute">Son 30 maç (yerel kayıttan, tüm geçmişin İstatistik sekmesinde)</p>
         </div>
         <button
           onClick={() => void load()}

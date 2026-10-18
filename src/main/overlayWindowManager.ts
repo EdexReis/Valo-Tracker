@@ -2,7 +2,6 @@ import path from 'node:path'
 import { BrowserWindow, globalShortcut, screen } from 'electron'
 import { log } from './logger'
 
-const SHORTCUT = 'CommandOrControl+Tab'
 const WIDTH = 340
 const HEIGHT = 560
 const MARGIN = 16
@@ -17,6 +16,9 @@ export class OverlayWindowManager {
   private win: BrowserWindow | null = null
   private hideTimer: NodeJS.Timeout | null = null
   private registered = false
+  private shortcut = 'CommandOrControl+Tab'
+  private enabled = true
+  private gameActive = false
 
   /** Creates the always-hidden, click-through overlay window. */
   create(preloadPath: string): void {
@@ -45,17 +47,39 @@ export class OverlayWindowManager {
     if (this.win && !this.win.isDestroyed()) this.win.webContents.send(channel, payload)
   }
 
+  /** Applies user settings: on/off and the accelerator. */
+  configure(enabled: boolean, shortcut: string): void {
+    this.enabled = enabled
+    this.shortcut = shortcut
+    this.unregister()
+    this.refresh()
+  }
+
   /**
-   * The shortcut is only registered while a match is running, so Ctrl+Tab keeps working
+   * The shortcut is only registered while a match is running, so it keeps working
    * in every other application the rest of the time.
    */
   setGameActive(active: boolean): void {
-    if (active && !this.registered) {
-      this.registered = globalShortcut.register(SHORTCUT, () => this.onShortcut())
-      if (!this.registered) log('Overlay', 'error', `${SHORTCUT} kısayolu başka bir uygulama tarafından kullanılıyor`)
-    } else if (!active) {
-      if (this.registered) globalShortcut.unregister(SHORTCUT)
-      this.registered = false
+    this.gameActive = active
+    this.refresh()
+  }
+
+  private unregister(): void {
+    if (this.registered) globalShortcut.unregister(this.shortcut)
+    this.registered = false
+  }
+
+  private refresh(): void {
+    if (this.gameActive && this.enabled) {
+      if (this.registered) return
+      try {
+        this.registered = globalShortcut.register(this.shortcut, () => this.onShortcut())
+      } catch {
+        this.registered = false
+      }
+      if (!this.registered) log('Overlay', 'error', `${this.shortcut} kısayolu kaydedilemedi (başka uygulama kullanıyor olabilir)`)
+    } else {
+      this.unregister()
       this.hide()
     }
   }
@@ -79,7 +103,8 @@ export class OverlayWindowManager {
   }
 
   destroy(): void {
-    this.setGameActive(false)
+    this.gameActive = false
+    this.unregister()
     if (this.win && !this.win.isDestroyed()) this.win.destroy()
     this.win = null
   }

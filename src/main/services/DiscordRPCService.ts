@@ -25,6 +25,7 @@ export class DiscordRPCService {
   private flushTimer: NodeJS.Timeout | null = null
   private destroyed = false
   private loggedConnected = false
+  private enabled = true
 
   start(): void {
     if (this.timer || this.destroyed) return
@@ -72,6 +73,19 @@ export class DiscordRPCService {
     }
   }
 
+  /** Turns Rich Presence on or off without dropping the Discord connection. */
+  setEnabled(on: boolean): void {
+    this.enabled = on
+    if (!on) {
+      if (this.flushTimer) clearTimeout(this.flushTimer)
+      this.flushTimer = null
+      this.lastSent = ''
+      if (this.ready && this.client) void this.client.clearActivity().catch(() => undefined)
+    } else {
+      this.flush()
+    }
+  }
+
   /** Sets the activity. Keeps the latest value and applies it once Discord is connected. */
   updatePresence(p: PresenceInput): void {
     this.pending = { largeImageKey: 'valorant', largeImageText: 'Valo Tracker', ...p }
@@ -79,7 +93,7 @@ export class DiscordRPCService {
   }
 
   private flush(): void {
-    if (!this.ready || !this.client || !this.pending) return
+    if (!this.enabled || !this.ready || !this.client || !this.pending) return
     const key = JSON.stringify(this.pending)
     if (key === this.lastSent) return
 

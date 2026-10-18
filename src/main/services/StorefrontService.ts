@@ -1,4 +1,4 @@
-import type { StoreSkin, StorefrontData } from '@shared/types'
+import type { CollectionData, StoreSkin, StorefrontData } from '@shared/types'
 import { REGION } from '../constants'
 import { HttpError, type AuthService } from './AuthService'
 import type { AssetCacheService } from './AssetCacheService'
@@ -64,7 +64,7 @@ export class StorefrontService {
 
   /** Raw offers joined with skin names and icons for the UI. */
   /** offerId -> VP price. Prices rarely change, so cache for an hour. */
-  private async prices(): Promise<Map<string, number>> {
+  async prices(): Promise<Map<string, number>> {
     if (this.priceCache && Date.now() - this.priceCache.at < 3600_000) return this.priceCache.map
     const res = await this.auth.remote<{ Offers?: any[] }>('GET', `${REGION.pd}/store/v1/offers/`)
     const map = new Map<string, number>()
@@ -74,6 +74,27 @@ export class StorefrontService {
     }
     this.priceCache = { at: Date.now(), map }
     return map
+  }
+
+  /** Owned skins (first levels) with their store price when one is known. */
+  async getCollection(): Promise<CollectionData> {
+    const puuid = this.auth.puuid
+    if (!puuid) throw new Error('Riot Client oturumu yok')
+    const SKIN_LEVEL_TYPE = 'e7c63390-eda7-46e0-bb7a-a6abdacd2433'
+    const [ent, prices] = await Promise.all([
+      this.auth.remote<{ Entitlements?: Array<{ ItemID: string }> }>('GET', `${REGION.pd}/store/v1/entitlements/${puuid}/${SKIN_LEVEL_TYPE}`),
+      this.prices().catch(() => new Map<string, number>()),
+      this.assets.load()
+    ])
+    const items = (ent.Entitlements ?? [])
+      .map((e) => e.ItemID.toLowerCase())
+      .filter((id) => this.assets.isBaseLevel(id))
+      .map((id) => {
+        const s = this.assets.skinOf(id)!
+        return { ...s, cost: prices.get(id) ?? null }
+      })
+      .sort((a, b) => (b.cost ?? 0) - (a.cost ?? 0) || a.name.localeCompare(b.name))
+    return { count: items.length, totalVP: items.reduce((n, i) => n + (i.cost ?? 0), 0), items }
   }
 
   async get(): Promise<StorefrontData> {

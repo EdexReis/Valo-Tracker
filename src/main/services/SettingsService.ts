@@ -1,9 +1,24 @@
 import path from 'node:path'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { app, safeStorage } from 'electron'
-import type { InstalockSettings, TelegramInput, TelegramSettingsView } from '@shared/types'
+import type { AppSettings, InstalockSettings, TelegramInput, TelegramSettingsView } from '@shared/types'
 
 const DEFAULTS: InstalockSettings = { enabled: false, defaultAgent: null, agentByMap: {} }
+
+export const APP_DEFAULTS: AppSettings = {
+  startWithWindows: false,
+  minimizeToTray: false,
+  discordRpc: true,
+  overlayEnabled: true,
+  overlayShortcut: 'CommandOrControl+Tab',
+  dodgeAssistant: true,
+  region: 'eu',
+  autoCoach: false,
+  breakReminders: true,
+  breakAfterHours: 3,
+  nativeNotifications: true,
+  instalockRiskAck: false
+}
 
 interface TelegramStored {
   /** base64 of the safeStorage-encrypted token (or plain text when encryption is unavailable) */
@@ -12,24 +27,42 @@ interface TelegramStored {
   chatId: string
 }
 
+function readJson<T>(file: string): T | null {
+  try {
+    return JSON.parse(readFileSync(file, 'utf8')) as T
+  } catch {
+    return null
+  }
+}
+
+function writeJson(file: string, data: unknown): void {
+  try {
+    writeFileSync(file, JSON.stringify(data, null, 2))
+  } catch {
+    /* non-fatal */
+  }
+}
+
 export class SettingsService {
-  private file = path.join(app.getPath('userData'), 'settings.json')
-  private telegramFile = path.join(app.getPath('userData'), 'telegram.json')
+  private dir = app.getPath('userData')
+  private file = path.join(this.dir, 'settings.json')
+  private appFile = path.join(this.dir, 'app-settings.json')
+  private telegramFile = path.join(this.dir, 'telegram.json')
   private settings: InstalockSettings
+  private appSettings: AppSettings
   private telegram: { botToken: string; chatId: string } = { botToken: '', chatId: '' }
 
   constructor() {
+    this.settings = { ...DEFAULTS, ...readJson<InstalockSettings>(this.file) }
+    this.appSettings = { ...APP_DEFAULTS, ...readJson<AppSettings>(this.appFile) }
     try {
-      this.settings = { ...DEFAULTS, ...JSON.parse(readFileSync(this.file, 'utf8')) }
+      const t = readJson<TelegramStored>(this.telegramFile)
+      if (t) {
+        const botToken = t.encrypted ? safeStorage.decryptString(Buffer.from(t.token, 'base64')) : t.token
+        this.telegram = { botToken, chatId: t.chatId }
+      }
     } catch {
-      this.settings = { ...DEFAULTS }
-    }
-    try {
-      const t = JSON.parse(readFileSync(this.telegramFile, 'utf8')) as TelegramStored
-      const botToken = t.encrypted ? safeStorage.decryptString(Buffer.from(t.token, 'base64')) : t.token
-      this.telegram = { botToken, chatId: t.chatId }
-    } catch {
-      /* not configured, or the encrypted blob cannot be read */
+      /* the encrypted blob cannot be read */
     }
   }
 
@@ -39,12 +72,18 @@ export class SettingsService {
 
   save(next: InstalockSettings): InstalockSettings {
     this.settings = { ...DEFAULTS, ...next }
-    try {
-      writeFileSync(this.file, JSON.stringify(this.settings, null, 2))
-    } catch {
-      /* non-fatal */
-    }
+    writeJson(this.file, this.settings)
     return this.settings
+  }
+
+  getApp(): AppSettings {
+    return this.appSettings
+  }
+
+  saveApp(next: AppSettings): AppSettings {
+    this.appSettings = { ...APP_DEFAULTS, ...next }
+    writeJson(this.appFile, this.appSettings)
+    return this.appSettings
   }
 
   /** Full credentials. Main process only: never sent to the renderer. */
@@ -68,11 +107,7 @@ export class SettingsService {
       encrypted,
       chatId: this.telegram.chatId
     }
-    try {
-      writeFileSync(this.telegramFile, JSON.stringify(stored))
-    } catch {
-      /* non-fatal */
-    }
+    writeJson(this.telegramFile, stored)
     return this.getTelegramView()
   }
 }

@@ -41,6 +41,13 @@ export class TelegramService {
     return this.send(token, chatId, TEST_MESSAGE)
   }
 
+  /** Sends a plain message to the saved chat. Returns false when Telegram is not configured or fails. */
+  async sendText(text: string): Promise<boolean> {
+    const { botToken, chatId } = this.settings.getTelegram()
+    if (!botToken || !chatId) return false
+    return (await this.send(botToken, chatId, text)).ok
+  }
+
   /** Called when a match is found (agent select). No-op when Telegram is not configured. */
   async notifyMatchFound(): Promise<void> {
     const { botToken, chatId } = this.settings.getTelegram()

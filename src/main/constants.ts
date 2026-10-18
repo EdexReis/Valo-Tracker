@@ -1,6 +1,19 @@
-export const REGION = {
-  glz: 'https://glz-eu-1.eu.a.pvp.net',
-  pd: 'https://pd.eu.a.pvp.net'
+import type { RegionKey } from '@shared/types'
+
+export const REGIONS: Record<RegionKey, { glz: string; pd: string }> = {
+  eu: { glz: 'https://glz-eu-1.eu.a.pvp.net', pd: 'https://pd.eu.a.pvp.net' },
+  na: { glz: 'https://glz-na-1.na.a.pvp.net', pd: 'https://pd.na.a.pvp.net' },
+  latam: { glz: 'https://glz-latam-1.na.a.pvp.net', pd: 'https://pd.na.a.pvp.net' },
+  br: { glz: 'https://glz-br-1.na.a.pvp.net', pd: 'https://pd.na.a.pvp.net' },
+  ap: { glz: 'https://glz-ap-1.ap.a.pvp.net', pd: 'https://pd.ap.a.pvp.net' },
+  kr: { glz: 'https://glz-kr-1.kr.a.pvp.net', pd: 'https://pd.kr.a.pvp.net' }
+}
+
+/** Active region endpoints. Mutated in place so services always read the current value. */
+export const REGION = { ...REGIONS.eu }
+
+export function setRegion(key: RegionKey): void {
+  Object.assign(REGION, REGIONS[key] ?? REGIONS.eu)
 }
 
 export const CLIENT_PLATFORM =

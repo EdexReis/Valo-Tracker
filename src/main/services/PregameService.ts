@@ -60,7 +60,7 @@ export class PregameService {
   }
 
   /** Flags teammates who lost their last 3 ranked/unrated matches or average below 0.5 K/D. Runs once per match. */
-  private async scanTeammates(matchId: string, players: Array<{ Subject: string }>): Promise<void> {
+  private async scanTeammates(matchId: string, players: Array<{ Subject: string; PlayerIdentity?: { Incognito?: boolean } }>): Promise<void> {
     if (this.scanned.has(matchId)) return
     this.scanned.add(matchId)
     const me = this.auth.puuid
@@ -93,7 +93,10 @@ export class PregameService {
         .catch(() => [])
       for (const r of risky) {
         const n = names.find((x) => x.Subject === r.puuid)
-        if (n?.GameName) r.name = `${n.GameName}#${n.TagLine}`
+        // Streamer-mode players hide their identity on purpose: never reveal it.
+        const hidden = players.find((x) => x.Subject === r.puuid)?.PlayerIdentity?.Incognito === true
+        if (hidden) r.name = 'Gizli Oyuncu'
+        else if (n?.GameName) r.name = `${n.GameName}#${n.TagLine}`
       }
     }
     this.warning = risky.length ? { matchId, players: risky } : null
@@ -119,7 +122,7 @@ export class PregameService {
   }
 
   private async run(manual: boolean): Promise<void> {
-    const cfg = this.settings.get()
+    const cfg = { ...this.settings.get(), ...this.settings.getApp() }
     const puuid = this.auth.puuid
     if (!puuid) return
 
@@ -128,11 +131,11 @@ export class PregameService {
 
     const match = await this.auth.remote<{
       MapID: string
-      AllyTeam?: { Players: Array<{ Subject: string; CharacterID?: string; CharacterSelectionState: string }> }
+      AllyTeam?: { Players: Array<{ Subject: string; CharacterID?: string; CharacterSelectionState: string; PlayerIdentity?: { Incognito?: boolean } }> }
     }>('GET', `${REGION.glz}/pregame/v1/matches/${matchId}`)
 
     // Teammate scan does not wait for, and does not delay, the lock below.
-    void this.scanTeammates(matchId, match.AllyTeam?.Players ?? [])
+    if (cfg.dodgeAssistant) void this.scanTeammates(matchId, match.AllyTeam?.Players ?? [])
 
     await this.assets.load()
     const map = this.assets.mapByMapUrl(match.MapID)
@@ -146,6 +149,7 @@ export class PregameService {
     this.evaluateComp(match.AllyTeam?.Players ?? [])
 
     if (!cfg.enabled && !manual) return
+    if (!cfg.instalockRiskAck) return // the user has not accepted the ban-risk warning
     if (!manual && (this.attempts.get(matchId) ?? 0) >= MAX_ATTEMPTS) return
     if (locked) {
       this.attempts.set(matchId, MAX_ATTEMPTS)

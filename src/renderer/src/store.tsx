@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import type { CompWarning, DodgeWarning, SessionRR, AppStatus, AssetsPayload, InstalockSettings, LogEntry, MatchSnapshot } from '@shared/types'
+import type { AppSettings, CoachEvent, PregameStage, CompWarning, DodgeWarning, SessionRR, AppStatus, AssetsPayload, InstalockSettings, LogEntry, MatchSnapshot } from '@shared/types'
 
 interface AppState {
   status: AppStatus
@@ -9,6 +9,10 @@ interface AppState {
   sessionRR: SessionRR
   dodge: DodgeWarning | null
   comp: CompWarning | null
+  appSettings: AppSettings
+  updateApp: (patch: Partial<AppSettings>) => void
+  lastCoach: CoachEvent | null
+  stage: PregameStage | null
   logs: LogEntry[]
   scanning: boolean
   updateSettings: (patch: Partial<InstalockSettings>) => void
@@ -32,6 +36,22 @@ export function AppProvider({ children }: { children: ReactNode }): JSX.Element 
   const [sessionRR, setSessionRR] = useState<SessionRR>({ ready: false, delta: 0, initialRR: 0, currentRR: 0 })
   const [dodge, setDodge] = useState<DodgeWarning | null>(null)
   const [comp, setComp] = useState<CompWarning | null>(null)
+  const [appSettings, setAppSettings] = useState<AppSettings>({
+    startWithWindows: false,
+    minimizeToTray: false,
+    discordRpc: true,
+    overlayEnabled: true,
+    overlayShortcut: 'CommandOrControl+Tab',
+    dodgeAssistant: true,
+    region: 'eu',
+    autoCoach: false,
+    breakReminders: true,
+    breakAfterHours: 3,
+    nativeNotifications: true,
+    instalockRiskAck: false
+  })
+  const [lastCoach, setLastCoach] = useState<CoachEvent | null>(null)
+  const [stage, setStage] = useState<PregameStage | null>(null)
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [scanning, setScanning] = useState(false)
 
@@ -43,6 +63,7 @@ export function AppProvider({ children }: { children: ReactNode }): JSX.Element 
     void api.getSessionRR().then(setSessionRR)
     void api.getDodgeWarning().then(setDodge)
     void api.getCompWarning().then(setComp)
+    void api.getAppSettings().then(setAppSettings)
     void api.getLogs().then(setLogs)
     // Assets may need a network fetch; retry until available.
     let cancelled = false
@@ -60,6 +81,8 @@ export function AppProvider({ children }: { children: ReactNode }): JSX.Element 
       api.onSessionRR(setSessionRR),
       api.onDodgeWarning(setDodge),
       api.onCompWarning(setComp),
+      api.onCoach(setLastCoach),
+      api.onStage(setStage),
       api.onLog((e) => setLogs((l) => [...l.slice(-199), e]))
     ]
     return () => {
@@ -76,6 +99,14 @@ export function AppProvider({ children }: { children: ReactNode }): JSX.Element 
     })
   }, [])
 
+  const updateApp = useCallback((patch: Partial<AppSettings>) => {
+    setAppSettings((prev) => {
+      const next = { ...prev, ...patch }
+      void window.api.saveAppSettings(next).then(setAppSettings)
+      return next
+    })
+  }, [])
+
   const scanMatch = useCallback(async () => {
     setScanning(true)
     try {
@@ -88,8 +119,8 @@ export function AppProvider({ children }: { children: ReactNode }): JSX.Element 
   const triggerPregame = useCallback(() => window.api.triggerPregame(), [])
 
   const value = useMemo(
-    () => ({ status, assets, settings, match, sessionRR, dodge, comp, logs, scanning, updateSettings, scanMatch, triggerPregame }),
-    [status, assets, settings, match, sessionRR, dodge, comp, logs, scanning, updateSettings, scanMatch, triggerPregame]
+    () => ({ status, assets, settings, match, sessionRR, dodge, comp, appSettings, updateApp, lastCoach, stage, logs, scanning, updateSettings, scanMatch, triggerPregame }),
+    [status, assets, settings, match, sessionRR, dodge, comp, appSettings, updateApp, lastCoach, stage, logs, scanning, updateSettings, scanMatch, triggerPregame]
   )
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

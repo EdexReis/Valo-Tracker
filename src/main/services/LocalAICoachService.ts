@@ -10,9 +10,21 @@ const UNREACHABLE = 'AI Koç sunucusuna (LM Studio) ulaşılamadı. Lütfen yere
 const TIMEOUT_MS = 180_000 // local models can be slow
 
 export class LocalAICoachService {
-  /** Sends the match stats to the local LM Studio server and returns the coaching text. Never throws. */
-  async getAICoaching(matchData: CoachData): Promise<CoachResult> {
-    const matchLabel = `${matchData.map} · ${matchData.agent} · ${matchData.kills}/${matchData.deaths}/${matchData.assists}`
+  /** Single-match coaching. Never throws. */
+  getAICoaching(matchData: CoachData): Promise<CoachResult> {
+    const label = `${matchData.map} · ${matchData.agent} · ${matchData.kills}/${matchData.deaths}/${matchData.assists}`
+    return this.ask(`Maç verilerim (JSON):\n${JSON.stringify(matchData)}`, label)
+  }
+
+  /** Coaching over the last ~20 ranked/unrated matches. Never throws. */
+  getTrendCoaching(trend: Record<string, unknown>): Promise<CoachResult> {
+    return this.ask(
+      `Son ${String(trend.matches)} maçımın özeti (JSON). Tekil maçlara değil, tekrar eden alışkanlıklarıma ve trende odaklan:\n${JSON.stringify(trend)}`,
+      `Son ${String(trend.matches)} maç · trend analizi`
+    )
+  }
+
+  private async ask(userContent: string, matchLabel: string): Promise<CoachResult> {
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS)
     try {
@@ -27,7 +39,7 @@ export class LocalAICoachService {
           max_tokens: 800,
           messages: [
             { role: 'system', content: SYSTEM_PROMPT },
-            { role: 'user', content: `Maç verilerim (JSON):\n${JSON.stringify(matchData)}` }
+            { role: 'user', content: userContent }
           ]
         })
       })

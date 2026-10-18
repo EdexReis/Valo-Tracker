@@ -51,6 +51,7 @@ export class AssetCacheService {
   private agentById = new Map<string, AgentInfo>()
   private mapByUrl = new Map<string, MapInfo>()
   private skinByKey = new Map<string, SlimSkin>() // skin uuid + level uuids
+  private skinList: SlimSkin[] = []
   private chromaById = new Map<string, { uuid: string; icon: string | null }>()
   private buddyByLevel = new Map<string, SlimBuddy>()
   private tierByNum = new Map<number, TierInfo>()
@@ -138,6 +139,7 @@ export class AssetCacheService {
     this.mapByUrl = new Map(c.maps.map((m) => [m.mapUrl, m]))
     this.activeSeason = c.activeSeasonId
     this.tierByNum = new Map(c.tiers.map((t) => [t.tier, t]))
+    this.skinList = c.skins
     this.skinByKey.clear()
     this.chromaById.clear()
     for (const s of c.skins) {
@@ -171,6 +173,27 @@ export class AssetCacheService {
 
   mapByMapUrl(mapUrl: string): MapInfo | undefined {
     return this.mapByUrl.get(mapUrl)
+  }
+
+  /** Skin for any of its ids (skin uuid or one of its level uuids). */
+  skinOf(id: string): { uuid: string; name: string; icon: string | null } | undefined {
+    const s = this.skinByKey.get(id.toLowerCase())
+    return s && { uuid: s.uuid, name: s.name, icon: s.icon }
+  }
+
+  /** True when `id` is the first level of a skin, which is the unit that is bought and owned. */
+  isBaseLevel(id: string): boolean {
+    const s = this.skinByKey.get(id.toLowerCase())
+    return !!s && s.levels[0] === id.toLowerCase()
+  }
+
+  searchSkins(query: string, limit = 30): Array<{ uuid: string; name: string; icon: string | null }> {
+    const q = query.trim().toLocaleLowerCase('tr-TR')
+    if (q.length < 2) return []
+    return this.skinList
+      .filter((s) => !/^(standard|random favorite)/i.test(s.name) && s.name.toLocaleLowerCase('tr-TR').includes(q))
+      .slice(0, limit)
+      .map((s) => ({ uuid: s.uuid, name: s.name, icon: s.icon }))
   }
 
   resolveSkin(skinId?: string, chromaId?: string): { name: string; icon: string | null } {

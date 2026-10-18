@@ -85,8 +85,9 @@ export class CoreGameService {
         const nm = nameById.get(id)
         return {
           puuid: id,
-          name: nm?.GameName || (p.PlayerIdentity?.Incognito ? 'Gizli' : 'Bilinmiyor'),
-          tag: nm?.TagLine ?? '',
+          // Players in streamer mode hide their identity on purpose: never reveal it.
+          name: p.PlayerIdentity?.Incognito && id !== puuid ? 'Gizli Oyuncu' : nm?.GameName || 'Bilinmiyor',
+          tag: p.PlayerIdentity?.Incognito && id !== puuid ? '' : (nm?.TagLine ?? ''),
           teamId: p.TeamID ?? '',
           isSelf: id === puuid,
           isStreamerMode: p.PlayerIdentity?.Incognito === true,

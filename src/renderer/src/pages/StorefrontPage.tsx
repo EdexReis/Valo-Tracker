@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Loader2, RefreshCw } from 'lucide-react'
 import type { StoreSkin, StorefrontData } from '@shared/types'
 import { useApp } from '../store'
+import WishlistPanel from '../components/WishlistPanel'
 
 function formatRemaining(sec: number): string {
   const d = Math.floor(sec / 86400)
@@ -106,6 +107,7 @@ export default function StorefrontPage(): JSX.Element {
           )}
         </>
       )}
+      <WishlistPanel />
     </div>
   )
 }
