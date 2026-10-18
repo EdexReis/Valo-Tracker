@@ -1,6 +1,6 @@
 {
   "name": "valo-tracker",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Valorant Desktop Companion",
   "main": "./out/main/index.js",
   "private": true,
