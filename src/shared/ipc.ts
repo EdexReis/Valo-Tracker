@@ -1,0 +1,23 @@
+export const IPC = {
+  getStatus: 'status:get',
+  getAssets: 'assets:get',
+  getSettings: 'settings:get',
+  saveSettings: 'settings:save',
+  getMatch: 'match:get',
+  scanMatch: 'match:scan',
+  triggerPregame: 'pregame:trigger',
+  getStorefront: 'store:get',
+  getMatchHistory: 'history:get',
+  getSessionRR: 'session:get',
+  evSession: 'ev:session',
+  getDodgeWarning: 'dodge:get',
+  evDodge: 'on-dodge-warning',
+  getTelegram: 'telegram:get',
+  saveTelegram: 'telegram:save',
+  testTelegram: 'telegram:test',
+  getLogs: 'log:get',
+  windowAction: 'window:action',
+  evStatus: 'ev:status',
+  evMatch: 'ev:match',
+  evLog: 'ev:log'
+} as const
