@@ -11,6 +11,8 @@ export interface AgentInfo {
   uuid: string
   name: string
   icon: string
+  /** valorant-api role name, e.g. Duelist, Controller */
+  role: string
 }
 
 export interface MapInfo {
@@ -62,6 +64,8 @@ export interface MatchPlayer {
   tag: string
   teamId: string
   isSelf: boolean
+  /** PlayerIdentity.Incognito: the player hides their identity (streamer mode) */
+  isStreamerMode: boolean
   agentId: string
   agentName: string
   agentIcon: string | null
@@ -91,7 +95,20 @@ export interface StorefrontData {
   nightMarket: { isActive: boolean; remainingSec: number; offers: StoreSkin[] } | null
 }
 
+export type VtsGrade = 'S' | 'A' | 'B' | 'C' | 'D'
+
+export interface VtsResult {
+  /** 0-1000 */
+  score: number
+  grade: VtsGrade
+}
+
+export interface CompWarning {
+  messages: string[]
+}
+
 export interface MatchSummary {
+  vts: VtsResult | null
   matchId: string
   startMillis: number
   queue: string
@@ -143,6 +160,14 @@ export interface TelegramResult {
   error?: string
 }
 
+export interface CoachResult {
+  ok: boolean
+  text?: string
+  error?: string
+  /** e.g. "Ascent · Jett · 18/12/4" */
+  matchLabel?: string
+}
+
 export interface LogEntry {
   time: number
   level: 'info' | 'success' | 'error'
@@ -166,6 +191,9 @@ export interface ValoApi {
   getTelegram(): Promise<TelegramSettingsView>
   saveTelegram(input: TelegramInput): Promise<TelegramSettingsView>
   testTelegram(input: TelegramInput): Promise<TelegramResult>
+  getCompWarning(): Promise<CompWarning | null>
+  onCompWarning(cb: (w: CompWarning | null) => void): () => void
+  getAICoaching(): Promise<CoachResult>
   getDodgeWarning(): Promise<DodgeWarning | null>
   onDodgeWarning(cb: (w: DodgeWarning | null) => void): () => void
   onSessionRR(cb: (s: SessionRR) => void): () => void

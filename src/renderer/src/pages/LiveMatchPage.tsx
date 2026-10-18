@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Check, Crosshair, Loader2, RefreshCw } from 'lucide-react'
+import { Check, Crosshair, EyeOff, Loader2, RefreshCw } from 'lucide-react'
 import type { MatchPlayer } from '@shared/types'
 import { useApp } from '../store'
 
@@ -39,6 +39,11 @@ function PlayerCard({ p }: { p: MatchPlayer }): JSX.Element {
           <div className="truncate text-sm font-bold">
             {p.name}
             {p.tag && <span className="font-normal text-val-mute"> #{p.tag}</span>}
+            {p.isStreamerMode && (
+              <span title="Yayıncı modu: bu oyuncu kimliğini gizliyor" className="ml-2 inline-flex items-center gap-1 rounded bg-purple-500/20 px-1.5 py-0.5 align-middle text-[10px] font-bold text-purple-300">
+                <EyeOff size={11} /> TTV / Gizli
+              </span>
+            )}
           </div>
           <div className="text-xs text-val-mute">{p.agentName}</div>
         </div>

@@ -72,7 +72,7 @@ export class AssetCacheService {
     } catch {
       /* no cache */
     }
-    if (!cache || !cache.tiers || Date.now() - cache.savedAt > TTL_MS) {
+    if (!cache || !cache.tiers || cache.agents.some((a) => a.role === undefined) || Date.now() - cache.savedAt > TTL_MS) {
       try {
         cache = await this.fetchAll()
         try {
@@ -108,7 +108,7 @@ export class AssetCacheService {
       savedAt: Date.now(),
       activeSeasonId: activeAct?.uuid ?? null,
       tiers: latestTiers.map((t) => ({ tier: t.tier, name: t.tierName, icon: t.largeIcon ?? t.smallIcon ?? null })),
-      agents: agents.map((a) => ({ uuid: a.uuid, name: a.displayName, icon: a.displayIcon })),
+      agents: agents.map((a) => ({ uuid: a.uuid, name: a.displayName, icon: a.displayIcon, role: a.role?.displayName ?? '' })),
       maps: maps.map((m) => ({
         uuid: m.uuid,
         mapUrl: m.mapUrl,

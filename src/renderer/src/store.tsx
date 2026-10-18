@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import type { DodgeWarning, SessionRR, AppStatus, AssetsPayload, InstalockSettings, LogEntry, MatchSnapshot } from '@shared/types'
+import type { CompWarning, DodgeWarning, SessionRR, AppStatus, AssetsPayload, InstalockSettings, LogEntry, MatchSnapshot } from '@shared/types'
 
 interface AppState {
   status: AppStatus
@@ -8,6 +8,7 @@ interface AppState {
   match: MatchSnapshot | null
   sessionRR: SessionRR
   dodge: DodgeWarning | null
+  comp: CompWarning | null
   logs: LogEntry[]
   scanning: boolean
   updateSettings: (patch: Partial<InstalockSettings>) => void
@@ -30,6 +31,7 @@ export function AppProvider({ children }: { children: ReactNode }): JSX.Element 
   const [match, setMatch] = useState<MatchSnapshot | null>(null)
   const [sessionRR, setSessionRR] = useState<SessionRR>({ ready: false, delta: 0, initialRR: 0, currentRR: 0 })
   const [dodge, setDodge] = useState<DodgeWarning | null>(null)
+  const [comp, setComp] = useState<CompWarning | null>(null)
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [scanning, setScanning] = useState(false)
 
@@ -40,6 +42,7 @@ export function AppProvider({ children }: { children: ReactNode }): JSX.Element 
     void api.getMatch().then(setMatch)
     void api.getSessionRR().then(setSessionRR)
     void api.getDodgeWarning().then(setDodge)
+    void api.getCompWarning().then(setComp)
     void api.getLogs().then(setLogs)
     // Assets may need a network fetch; retry until available.
     let cancelled = false
@@ -56,6 +59,7 @@ export function AppProvider({ children }: { children: ReactNode }): JSX.Element 
       api.onMatch(setMatch),
       api.onSessionRR(setSessionRR),
       api.onDodgeWarning(setDodge),
+      api.onCompWarning(setComp),
       api.onLog((e) => setLogs((l) => [...l.slice(-199), e]))
     ]
     return () => {
@@ -84,8 +88,8 @@ export function AppProvider({ children }: { children: ReactNode }): JSX.Element 
   const triggerPregame = useCallback(() => window.api.triggerPregame(), [])
 
   const value = useMemo(
-    () => ({ status, assets, settings, match, sessionRR, dodge, logs, scanning, updateSettings, scanMatch, triggerPregame }),
-    [status, assets, settings, match, sessionRR, dodge, logs, scanning, updateSettings, scanMatch, triggerPregame]
+    () => ({ status, assets, settings, match, sessionRR, dodge, comp, logs, scanning, updateSettings, scanMatch, triggerPregame }),
+    [status, assets, settings, match, sessionRR, dodge, comp, logs, scanning, updateSettings, scanMatch, triggerPregame]
   )
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

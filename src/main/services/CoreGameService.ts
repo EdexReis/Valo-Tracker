@@ -89,6 +89,7 @@ export class CoreGameService {
           tag: nm?.TagLine ?? '',
           teamId: p.TeamID ?? '',
           isSelf: id === puuid,
+          isStreamerMode: p.PlayerIdentity?.Incognito === true,
           agentId: p.CharacterID ?? '',
           agentName: agent?.name ?? '?',
           agentIcon: agent?.icon ?? null,

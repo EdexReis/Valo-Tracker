@@ -3,6 +3,14 @@ import { Loader2, RefreshCw } from 'lucide-react'
 import type { MatchSummary } from '@shared/types'
 import { useApp } from '../store'
 
+const GRADE_COLOR = {
+  S: 'bg-amber-400/20 text-amber-300',
+  A: 'bg-emerald-400/20 text-emerald-300',
+  B: 'bg-sky-400/20 text-sky-300',
+  C: 'bg-val-mute/20 text-val-mute',
+  D: 'bg-val-red/20 text-val-red'
+} as const
+
 const STYLE = {
   win: { bar: 'border-l-emerald-400', text: 'text-emerald-400', label: 'Galibiyet' },
   loss: { bar: 'border-l-val-red', text: 'text-val-red', label: 'Mağlubiyet' },
@@ -77,7 +85,12 @@ export default function HistoryPage(): JSX.Element {
                 </span>
                 <span className="ml-2 text-xs text-val-mute">K/D {(m.kills / Math.max(1, m.deaths)).toFixed(2)}</span>
               </div>
-              <div className="ml-auto text-xs text-val-mute">
+              {m.vts && (
+                <div className={`ml-auto rounded px-2 py-1 text-xs font-bold tabular-nums ${GRADE_COLOR[m.vts.grade]}`} title="Valo Tracker Skoru (0-1000)">
+                  VTS: {m.vts.score} ({m.vts.grade} Sınıfı)
+                </div>
+              )}
+              <div className={`${m.vts ? '' : 'ml-auto '}text-xs text-val-mute`}>
                 {new Date(m.startMillis).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' })}
               </div>
             </div>

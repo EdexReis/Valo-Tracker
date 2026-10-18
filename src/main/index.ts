@@ -1,6 +1,6 @@
 import path from 'node:path'
 import { app, BrowserWindow, globalShortcut, ipcMain, shell } from 'electron'
-import type { AppStatus, InstalockSettings, TelegramInput, WindowAction } from '@shared/types'
+import type { AppStatus, CoachResult, InstalockSettings, TelegramInput, WindowAction } from '@shared/types'
 import { IPC } from '@shared/ipc'
 import { getLogHistory, log, logBus } from './logger'
 import { AuthService } from './services/AuthService'
@@ -14,6 +14,7 @@ import { TiltGuardService } from './services/TiltGuardService'
 import { TelegramService } from './services/TelegramService'
 import { DiscordRPCService } from './services/DiscordRPCService'
 import { OverlayWindowManager } from './overlayWindowManager'
+import { LocalAICoachService } from './services/LocalAICoachService'
 import { startUpdater } from './services/UpdateService'
 import { MmrService } from './services/MmrService'
 import { CoreGameService } from './services/CoreGameService'
@@ -63,7 +64,8 @@ function wire(): void {
   const mmr = new MmrService(auth, assets)
   const matches = new MatchService(auth, assets)
   const pregame = new PregameService(auth, assets, settings, matches, (w) => send(IPC.evDodge, w), (s) =>
-    rpc.updatePresence({ details: `Ajan Seçimi: ${s.mapName}`, state: s.agentName ?? 'Ajan kilitleniyor...' })
+    rpc.updatePresence({ details: `Ajan Seçimi: ${s.mapName}`, state: s.agentName ?? 'Ajan kilitleniyor...' }),
+    (c) => send(IPC.evComp, c)
   )
   const core = new CoreGameService(auth, assets, mmr, (m) => {
     send(IPC.evMatch, m)
@@ -81,6 +83,7 @@ function wire(): void {
 
   const storefront = new StorefrontService(auth, assets)
   const telegram = new TelegramService(settings)
+  const coach = new LocalAICoachService()
   const tilt = new TiltGuardService(auth, mmr, (s) => send(IPC.evSession, s))
   const status = (): AppStatus => ({ connection: ws.connection, gameState: currentState, puuid: auth.puuid })
   let currentState: AppStatus['gameState'] = 'UNKNOWN'
@@ -129,6 +132,16 @@ function wire(): void {
   ipcMain.handle(IPC.getTelegram, () => settings.getTelegramView())
   ipcMain.handle(IPC.saveTelegram, (_e, input: TelegramInput) => settings.saveTelegram(input))
   ipcMain.handle(IPC.testTelegram, (_e, input: TelegramInput) => telegram.test(input))
+  ipcMain.handle(IPC.getAICoaching, async (): Promise<CoachResult> => {
+    try {
+      const data = await matches.getCoachData()
+      if (!data) return { ok: false, error: 'Analiz edilecek maç bulunamadı.' }
+      return await coach.getAICoaching(data)
+    } catch (e) {
+      return { ok: false, error: `Maç verisi alınamadı: ${(e as Error).message}` }
+    }
+  })
+  ipcMain.handle(IPC.getCompWarning, () => pregame.compWarning)
   ipcMain.handle(IPC.getDodgeWarning, () => pregame.warning)
   ipcMain.handle(IPC.getSessionRR, () => tilt.state)
   ipcMain.handle(IPC.getLogs, () => getLogHistory())

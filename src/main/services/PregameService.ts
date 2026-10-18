@@ -1,6 +1,6 @@
 import { REGION } from '../constants'
 import { log } from '../logger'
-import type { DodgeWarning, RiskyPlayer } from '@shared/types'
+import type { CompWarning, DodgeWarning, RiskyPlayer } from '@shared/types'
 import { HttpError, type AuthService } from './AuthService'
 import type { MatchService } from './MatchService'
 import type { AssetCacheService } from './AssetCacheService'
@@ -19,13 +19,41 @@ export class PregameService {
     private settings: SettingsService,
     private matches: MatchService,
     private onDodge: (w: DodgeWarning | null) => void,
-    private onStage: (s: { mapName: string; agentName: string | null }) => void
+    private onStage: (s: { mapName: string; agentName: string | null }) => void,
+    private onComp: (w: CompWarning | null) => void
   ) {}
+
+  compWarning: CompWarning | null = null
+
+  /**
+   * Looks at the agents picked or hovered by the whole team. Re-evaluated on every pregame event;
+   * "no controller" only fires once all five players have a pick, so early picks do not false-alarm.
+   */
+  private evaluateComp(players: Array<{ CharacterID?: string }>): void {
+    const roles = players
+      .filter((p) => p.CharacterID)
+      .map((p) => (this.assets.agent(p.CharacterID!)?.role ?? '').toLowerCase())
+    const messages: string[] = []
+    if (roles.filter((r) => r === 'duelist').length >= 3) {
+      messages.push('Takımda 3 veya daha fazla Düellocu var! Kazanma şansınız düşebilir.')
+    }
+    if (players.length > 0 && roles.length === players.length && !roles.includes('controller')) {
+      messages.push('Takımda görüş engelleyici (Smoke) yok! Kazanma şansınız düşebilir.')
+    }
+    const next = messages.length ? { messages } : null
+    if (JSON.stringify(next) === JSON.stringify(this.compWarning)) return
+    this.compWarning = next
+    this.onComp(next)
+  }
 
   private scanned = new Set<string>()
   warning: DodgeWarning | null = null
 
   clearWarning(): void {
+    if (this.compWarning) {
+      this.compWarning = null
+      this.onComp(null)
+    }
     if (!this.warning) return
     this.warning = null
     this.onDodge(null)
@@ -115,6 +143,8 @@ export class PregameService {
       agentName: locked && me?.CharacterID ? (this.assets.agent(me.CharacterID)?.name ?? null) : null
     })
 
+    this.evaluateComp(match.AllyTeam?.Players ?? [])
+
     if (!cfg.enabled && !manual) return
     if (!manual && (this.attempts.get(matchId) ?? 0) >= MAX_ATTEMPTS) return
     if (locked) {
@@ -138,6 +168,7 @@ export class PregameService {
       this.attempts.set(matchId, MAX_ATTEMPTS)
       log('Instalocker', 'success', `${map?.name ?? 'Harita'}: ${agentName} kilitlendi`)
       this.onStage({ mapName: map?.name ?? 'Bilinmeyen Harita', agentName })
+      this.evaluateComp([...(match.AllyTeam?.Players ?? []).filter((x) => x.Subject !== puuid), { CharacterID: agentId }])
     } catch (e) {
       log('Instalocker', 'error', `${agentName} kilitlenemedi: ${(e as Error).message}`)
     }

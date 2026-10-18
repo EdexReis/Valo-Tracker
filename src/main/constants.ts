@@ -23,4 +23,6 @@ export const SOCKETS = {
   buddy: '77258665-71d1-4623-bc72-44db9bd5b3b3'
 }
 
+export const LM_STUDIO_URL = 'http://127.0.0.1:1234/v1'
+
 export const POLL_LOCKFILE_MS = 3000
