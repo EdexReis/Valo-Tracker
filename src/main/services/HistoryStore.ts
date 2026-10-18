@@ -62,14 +62,19 @@ export class HistoryStore {
     return [...this.bucket(puuid).matches].sort((a, b) => b.startMillis - a.startMillis)
   }
 
-  add(puuid: string, list: MatchSummary[]): number {
+  /** Inserts new matches and replaces known ones. Returns how many were new. */
+  upsert(puuid: string, list: MatchSummary[]): number {
+    if (!list.length) return 0
     const b = this.bucket(puuid)
-    const known = new Set(b.matches.map((m) => m.matchId))
-    const fresh = list.filter((m) => !known.has(m.matchId))
-    if (!fresh.length) return 0
-    b.matches = [...b.matches, ...fresh].sort((a, c) => c.startMillis - a.startMillis).slice(0, MAX_MATCHES)
+    const byId = new Map(b.matches.map((m) => [m.matchId, m]))
+    let added = 0
+    for (const m of list) {
+      if (!byId.has(m.matchId)) added++
+      byId.set(m.matchId, m)
+    }
+    b.matches = [...byId.values()].sort((a, c) => c.startMillis - a.startMillis).slice(0, MAX_MATCHES)
     this.save()
-    return fresh.length
+    return added
   }
 
   rr(puuid: string): RRPoint[] {

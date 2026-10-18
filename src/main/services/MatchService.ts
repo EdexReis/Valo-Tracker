@@ -1,9 +1,10 @@
-import type { MatchSummary, VtsGrade, VtsResult } from '@shared/types'
+import type { MatchSummary, VtsResult } from '@shared/types'
 import { buildTrend, isRankedLike } from '@shared/stats'
 import { REGION } from '../constants'
 import type { AuthService } from './AuthService'
 import type { AssetCacheService } from './AssetCacheService'
 import type { HistoryStore } from './HistoryStore'
+import { computeVTS, openingDuels, VTS_VERSION } from './vts'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const QUEUES: Record<string, string> = {
@@ -18,41 +19,6 @@ const QUEUES: Record<string, string> = {
   premier: 'Premier',
   snowball: 'Snowball Fight',
   '': 'Özel'
-}
-
-const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v))
-
-export function vtsGrade(score: number): VtsGrade {
-  if (score >= 800) return 'S'
-  if (score >= 650) return 'A'
-  if (score >= 500) return 'B'
-  if (score >= 350) return 'C'
-  return 'D'
-}
-
-/** First blood / first death: the earliest kill of every round decides both. */
-function openingDuels(d: any, puuid: string): { firstBloods: number; firstDeaths: number } {
-  const kills: Array<{ round: number; time: number; killer: string; victim: string }> = []
-  if (Array.isArray(d.kills)) {
-    for (const k of d.kills) kills.push({ round: k.round, time: k.roundTime ?? 0, killer: k.killer, victim: k.victim })
-  } else {
-    for (const r of d.roundResults ?? [])
-      for (const ps of r.playerStats ?? [])
-        for (const k of ps.kills ?? [])
-          kills.push({ round: r.roundNum, time: k.timeSinceRoundStartMillis ?? 0, killer: k.killer, victim: k.victim })
-  }
-  const first = new Map<number, (typeof kills)[number]>()
-  for (const k of kills) {
-    const cur = first.get(k.round)
-    if (!cur || k.time < cur.time) first.set(k.round, k)
-  }
-  let firstBloods = 0
-  let firstDeaths = 0
-  first.forEach((k) => {
-    if (k.killer === puuid) firstBloods++
-    if (k.victim === puuid) firstDeaths++
-  })
-  return { firstBloods, firstDeaths }
 }
 
 export interface CoachData {
@@ -97,31 +63,6 @@ export class MatchService {
     return (res.History ?? []).map((h) => ({ matchId: h.MatchID, queueId: h.QueueID ?? '' }))
   }
 
-  /**
-   * Valo Tracker Score, 0-1000: K/D 40% (max 400), ACS 40% (max 400), assists + first bloods 20% (max 200).
-   * K/D 1.0 = 200 and 1.5+ = 400; ACS 200 = 200 and 300+ = 400.
-   */
-  calculateVTS(matchDetails: any, puuid: string): VtsResult | null {
-    const me = (matchDetails.players ?? []).find((p: any) => p.subject === puuid)
-    const s = me?.stats
-    if (!s) return null
-    const rounds = s.roundsPlayed || (matchDetails.roundResults ?? []).length
-    if (!rounds) return null
-
-    const kd = s.kills / Math.max(1, s.deaths)
-    const kdPts = kd <= 1 ? 200 * kd : clamp(200 + (kd - 1) * 400, 0, 400)
-
-    const acs = s.score / rounds
-    const acsPts = acs <= 200 ? acs : clamp(200 + (acs - 200) * 2, 0, 400)
-
-    // ~0.3 assists/round and ~0.15 first bloods/round earn the full 100 points each.
-    const assistPts = clamp((s.assists / rounds / 0.3) * 100, 0, 100)
-    const fbPts = clamp((openingDuels(matchDetails, puuid).firstBloods / rounds / 0.15) * 100, 0, 100)
-
-    const score = Math.round(clamp(kdPts + acsPts + assistPts + fbPts, 0, 1000))
-    return { score, grade: vtsGrade(score) }
-  }
-
   private async rawDetails(matchId: string): Promise<any> {
     let d = this.details.get(matchId)
     if (!d) {
@@ -158,7 +99,7 @@ export class MatchService {
     const duels = openingDuels(d, puuid)
 
     return {
-      vts: this.calculateVTS(d, puuid),
+      vts: computeVTS(d, puuid, agent?.role ?? ''),
       matchId,
       startMillis: d.matchInfo?.gameStartMillis ?? 0,
       queue: QUEUES[queue] ?? queue,
@@ -194,15 +135,28 @@ export class MatchService {
       .sort((a, b) => b.startMillis - a.startMillis)
   }
 
-  /** Pulls the player's latest 20 matches into the local store. Returns how many were new. */
+  private staleFailed = new Set<string>()
+
+  /**
+   * Pulls the player's latest 20 matches into the local store. Matches saved with an older VTS formula
+   * are recalculated while Riot still serves their details. Returns how many matches were new.
+   */
   async syncHistory(): Promise<number> {
     const puuid = this.auth.puuid
     if (!puuid) return 0
     await this.assets.load()
-    const ids = (await this.getHistoryIds(puuid, 20)).filter((h) => !this.history.has(puuid, h.matchId))
+    const stored = new Map(this.history.matches(puuid).map((m) => [m.matchId, m]))
+    const ids = (await this.getHistoryIds(puuid, 20)).filter((h) => {
+      const old = stored.get(h.matchId)
+      return !old || (old.vts?.version !== VTS_VERSION && !this.staleFailed.has(h.matchId))
+    })
     const settled = await Promise.allSettled(ids.map((h) => this.getMatchDetails(h.matchId, puuid, h.queueId)))
-    const ok = settled.filter((r): r is PromiseFulfilledResult<MatchSummary> => r.status === 'fulfilled').map((r) => r.value)
-    return this.history.add(puuid, ok)
+    const ok: MatchSummary[] = []
+    settled.forEach((r, i) => {
+      if (r.status === 'fulfilled') ok.push(r.value)
+      else this.staleFailed.add(ids[i].matchId)
+    })
+    return this.history.upsert(puuid, ok)
   }
 
   /** Synced local history, newest first. */

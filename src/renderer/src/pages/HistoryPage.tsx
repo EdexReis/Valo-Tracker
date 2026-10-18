@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Loader2, RefreshCw } from 'lucide-react'
-import type { MatchSummary } from '@shared/types'
+import { ChevronDown, Loader2, RefreshCw } from 'lucide-react'
+import type { MatchSummary, VtsResult } from '@shared/types'
 import { useApp } from '../store'
 
 const GRADE_COLOR = {
@@ -17,11 +17,42 @@ const STYLE = {
   draw: { bar: 'border-l-val-mute', text: 'text-val-mute', label: 'Berabere' }
 } as const
 
+/** Points color: below average red, around average blue, above average green. */
+const barColor = (p: number): string => (p >= 65 ? 'bg-emerald-400' : p >= 40 ? 'bg-sky-400' : 'bg-val-red')
+
+function Breakdown({ vts }: { vts: VtsResult }): JSX.Element {
+  return (
+    <div className="rounded-b border border-t-0 border-val-line bg-val-bg/60 p-4">
+      <div className="grid gap-x-8 gap-y-2.5 md:grid-cols-2">
+        {vts.components?.map((c) => (
+          <div key={c.key}>
+            <div className="flex items-baseline justify-between text-xs">
+              <span className="font-semibold">
+                {c.label} <span className="font-normal text-val-mute">· %{Math.round(c.weight * 100)}</span>
+              </span>
+              <span className="text-val-mute">{c.value}</span>
+            </div>
+            <div className="mt-1 h-1.5 overflow-hidden rounded bg-val-raised">
+              <div className={`h-full ${barColor(c.points)}`} style={{ width: `${c.points}%` }} />
+            </div>
+          </div>
+        ))}
+      </div>
+      <p className="mt-3 text-[11px] text-val-mute">
+        Çubuklar 0-100 puan, 50 = ortalama oyuncu. ACS, ajan rolüne göre değerlendirilir.
+        {typeof vts.kast === 'number' && ` KAST %${vts.kast}.`}
+        {!!vts.opponentAdjust && ` Rakip rank düzeltmesi: ${vts.opponentAdjust > 0 ? '+' : ''}${vts.opponentAdjust}.`}
+      </p>
+    </div>
+  )
+}
+
 export default function HistoryPage(): JSX.Element {
   const { status } = useApp()
   const [list, setList] = useState<MatchSummary[] | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [open, setOpen] = useState<string | null>(null)
   const connected = status.connection === 'connected'
 
   const load = useCallback(async () => {
@@ -45,7 +76,7 @@ export default function HistoryPage(): JSX.Element {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold">Kariyer / Geçmiş</h1>
-          <p className="text-sm text-val-mute">Son 30 maç (yerel kayıttan, tüm geçmişin İstatistik sekmesinde)</p>
+          <p className="text-sm text-val-mute">Son 30 maç (yerel kayıttan). VTS rozetine tıklayınca puanın dökümü açılır.</p>
         </div>
         <button
           onClick={() => void load()}
@@ -63,36 +94,48 @@ export default function HistoryPage(): JSX.Element {
       <div className="space-y-2">
         {list?.map((m) => {
           const s = STYLE[m.result]
+          const expanded = open === m.matchId && !!m.vts?.components
           return (
-            <div key={m.matchId} className={`flex items-center gap-4 rounded border border-l-4 border-val-line bg-val-panel p-3 ${s.bar}`}>
-              {m.agentIcon ? (
-                <img src={m.agentIcon} alt={m.agentName} className="h-11 w-11 rounded bg-val-raised" />
-              ) : (
-                <div className="h-11 w-11 rounded bg-val-raised" />
-              )}
-              <div className="w-40">
-                <div className={`text-sm font-bold ${s.text}`}>{s.label}</div>
-                <div className="text-xs text-val-mute">
-                  {m.mapName} · {m.queue}
+            <div key={m.matchId}>
+              <div className={`flex items-center gap-4 border border-l-4 border-val-line bg-val-panel p-3 ${s.bar} ${expanded ? 'rounded-t' : 'rounded'}`}>
+                {m.agentIcon ? (
+                  <img src={m.agentIcon} alt={m.agentName} className="h-11 w-11 rounded bg-val-raised" />
+                ) : (
+                  <div className="h-11 w-11 rounded bg-val-raised" />
+                )}
+                <div className="w-40">
+                  <div className={`text-sm font-bold ${s.text}`}>{s.label}</div>
+                  <div className="text-xs text-val-mute">
+                    {m.mapName} · {m.queue}
+                  </div>
+                </div>
+                <div className="w-24 text-center text-lg font-bold tabular-nums">
+                  {m.roundsWon} : {m.roundsLost}
+                </div>
+                <div className="text-sm tabular-nums">
+                  <span className="font-bold">
+                    {m.kills} / {m.deaths} / {m.assists}
+                  </span>
+                  <span className="ml-2 text-xs text-val-mute">
+                    K/D {(m.kills / Math.max(1, m.deaths)).toFixed(2)} · ACS {m.acs}
+                  </span>
+                </div>
+                {m.vts && (
+                  <button
+                    onClick={() => setOpen(expanded ? null : m.matchId)}
+                    disabled={!m.vts.components}
+                    className={`ml-auto flex items-center gap-1 rounded px-2 py-1 text-xs font-bold tabular-nums ${GRADE_COLOR[m.vts.grade]}`}
+                    title="Valo Tracker Skoru (0-1000)"
+                  >
+                    VTS: {m.vts.score} ({m.vts.grade} Sınıfı)
+                    {m.vts.components && <ChevronDown size={13} className={expanded ? 'rotate-180' : ''} />}
+                  </button>
+                )}
+                <div className={`${m.vts ? '' : 'ml-auto '}text-xs text-val-mute`}>
+                  {new Date(m.startMillis).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' })}
                 </div>
               </div>
-              <div className="w-24 text-center text-lg font-bold tabular-nums">
-                {m.roundsWon} : {m.roundsLost}
-              </div>
-              <div className="text-sm tabular-nums">
-                <span className="font-bold">
-                  {m.kills} / {m.deaths} / {m.assists}
-                </span>
-                <span className="ml-2 text-xs text-val-mute">K/D {(m.kills / Math.max(1, m.deaths)).toFixed(2)}</span>
-              </div>
-              {m.vts && (
-                <div className={`ml-auto rounded px-2 py-1 text-xs font-bold tabular-nums ${GRADE_COLOR[m.vts.grade]}`} title="Valo Tracker Skoru (0-1000)">
-                  VTS: {m.vts.score} ({m.vts.grade} Sınıfı)
-                </div>
-              )}
-              <div className={`${m.vts ? '' : 'ml-auto '}text-xs text-val-mute`}>
-                {new Date(m.startMillis).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' })}
-              </div>
+              {expanded && m.vts && <Breakdown vts={m.vts} />}
             </div>
           )
         })}

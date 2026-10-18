@@ -97,10 +97,30 @@ export interface StorefrontData {
 
 export type VtsGrade = 'S' | 'A' | 'B' | 'C' | 'D'
 
+export interface VtsComponent {
+  key: string
+  label: string
+  /** human readable raw value, e.g. "245 (beklenen 230)" */
+  value: string
+  /** 0-100, 50 = average player */
+  points: number
+  /** share of the final score, 0-1 */
+  weight: number
+}
+
 export interface VtsResult {
   /** 0-1000 */
   score: number
   grade: VtsGrade
+  /** formula version; older stored matches are recalculated */
+  version?: number
+  components?: VtsComponent[]
+  /** % of rounds with a kill, assist, survival or trade */
+  kast?: number
+  clutches?: number
+  multiKills?: { k3: number; k4: number; k5: number }
+  /** rank adjustment applied to the score (competitive only) */
+  opponentAdjust?: number
 }
 
 export interface CompWarning {
