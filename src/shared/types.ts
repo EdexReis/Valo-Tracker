@@ -330,6 +330,8 @@ export interface AppSettings {
   language: 'tr' | 'en'
   /** lower priority and hold back optional background work while a match runs */
   lightMode: boolean
+  /** what the overlay shows while the shortcut is held */
+  overlayMode: OverlayMode
 }
 
 export interface RRPoint {
@@ -417,6 +419,32 @@ export interface CoPlayerRow {
   avgVts: number
 }
 
+export type TimelineFormat = 'csv' | 'txt' | 'json'
+
+export interface TimelineExportOptions {
+  offsetSec: number
+  preRollSec: number
+  postRollSec: number
+}
+
+export type OverlayMode = 'players' | 'me' | 'both'
+
+export interface OverlayMeStats {
+  rank: { tier: number; rr: number; name: string | null; icon: string | null } | null
+  /** RR gained or lost since the app connected (null before it is known) */
+  sessionRR: number | null
+  sessionWins: number
+  sessionLosses: number
+  hours: number
+  /** newest first */
+  recent: Array<{ result: 'win' | 'loss'; vts: number | null }>
+  recentAvg: { kd: number; acs: number; vts: number } | null
+  /** results on the map of the current match */
+  onMap: { map: string; games: number; winRate: number } | null
+  /** results on that map with the current agent */
+  withAgent: { agent: string; games: number; winRate: number } | null
+}
+
 export type OverlayCorner = 'tr' | 'tl' | 'br' | 'bl'
 
 export interface BackupResult {
@@ -468,6 +496,8 @@ export interface ValoApi {
   testDiscordWebhook(url: string): Promise<WebhookResult>
   sendLastMatchToDiscord(): Promise<WebhookResult>
   getCoPlayers(): Promise<CoPlayerRow[]>
+  getOverlayMe(): Promise<OverlayMeStats>
+  exportTimeline(matchId: string, format: TimelineFormat, opts: TimelineExportOptions): Promise<ExportResult>
   getSessionRR(): Promise<SessionRR>
   getTelegram(): Promise<TelegramSettingsView>
   saveTelegram(input: TelegramInput): Promise<TelegramSettingsView>

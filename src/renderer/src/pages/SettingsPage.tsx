@@ -75,6 +75,19 @@ function GeneralPanel(): JSX.Element {
           <Toggle on={s.overlayEnabled} onChange={(v) => updateApp({ overlayEnabled: v })} label="Overlay" />
         </div>
       </Row>
+      <Row title={tr('Overlay içeriği')} hint={tr('Oyuncu listesi, kendi istatistiklerin veya ikisi birden.')}>
+        <select
+          className={field}
+          value={s.overlayMode}
+          onChange={(e) => updateApp({ overlayMode: e.target.value as typeof s.overlayMode })}
+          disabled={!s.overlayEnabled}
+          aria-label={tr('Overlay içeriği')}
+        >
+          <option value="players">{tr('Oyuncular')}</option>
+          <option value="me">{tr('Benim istatistiklerim')}</option>
+          <option value="both">{tr('İkisi de')}</option>
+        </select>
+      </Row>
       <Row title={tr('Overlay konumu ve saydamlığı')} hint={tr('Maç sırasında overlay\'in ekranın hangi köşesinde ve ne kadar opak görüneceği (ana monitör).')}>
         <div className="flex items-center gap-3">
           <select

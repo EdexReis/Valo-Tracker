@@ -5,7 +5,8 @@ import type { AuthService } from './AuthService'
 import type { AssetCacheService } from './AssetCacheService'
 import type { HistoryStore } from './HistoryStore'
 import { computeVTS, openingDuels, VTS_VERSION } from './vts'
-import { weaponTally } from './weapons'
+import { weaponKey, weaponTally } from './weapons'
+import type { MatchTimeline, TimelineEvent } from '@shared/timeline'
 import { tr } from '@shared/i18n'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -295,6 +296,52 @@ export class MatchService {
       puuids
     )
     return new Map(res.filter((n) => n.GameName).map((n) => [n.Subject, `${n.GameName}#${n.TagLine}`]))
+  }
+
+  /** My kills and deaths of a finished match with their game time, for the timestamp export. */
+  async getTimeline(matchId: string): Promise<MatchTimeline> {
+    const puuid = this.auth.puuid
+    if (!puuid) throw new Error(tr('Riot Client oturumu yok'))
+    await this.assets.load()
+    const d = await this.rawDetails(matchId)
+    const players: any[] = d.players ?? []
+    const me = players.find((p) => p.subject === puuid)
+    if (!me) throw new Error(tr('Oyuncu maç verisinde yok'))
+    const agentOf = (id: string): string | null => this.assets.agent(players.find((p) => p.subject === id)?.characterId ?? '')?.name ?? null
+    const special: Record<string, string> = { ability: tr('Yetenek'), spike: 'Spike', fall: tr('Düşme') }
+    const weaponOf = (fd: any): string | null => {
+      const key = weaponKey(fd)
+      return this.assets.weaponName(key) ?? special[key] ?? null
+    }
+
+    const kills: any[] = (Array.isArray(d.kills) ? d.kills : []).slice().sort((a: any, b: any) => (a.gameTime ?? 0) - (b.gameTime ?? 0))
+    const roundKills = new Map<number, number>()
+    for (const k of kills) if (k.killer === puuid && k.victim !== puuid) roundKills.set(k.round, (roundKills.get(k.round) ?? 0) + 1)
+    const seen = new Map<number, number>()
+
+    const events: TimelineEvent[] = []
+    for (const k of kills) {
+      if (k.killer === puuid && k.victim !== puuid) {
+        const index = (seen.get(k.round) ?? 0) + 1
+        seen.set(k.round, index)
+        events.push({
+          type: 'kill', round: (k.round ?? 0) + 1, gameTimeMs: k.gameTime ?? 0, roundTimeMs: k.roundTime ?? 0,
+          weapon: weaponOf(k.finishingDamage), other: agentOf(k.victim), killIndex: index, roundKills: roundKills.get(k.round) ?? 1
+        })
+      } else if (k.victim === puuid) {
+        events.push({
+          type: 'death', round: (k.round ?? 0) + 1, gameTimeMs: k.gameTime ?? 0, roundTimeMs: k.roundTime ?? 0,
+          weapon: weaponOf(k.finishingDamage), other: k.killer === puuid ? null : agentOf(k.killer), killIndex: 0, roundKills: 0
+        })
+      }
+    }
+    return {
+      matchId,
+      mapName: this.assets.mapByMapUrl(d.matchInfo?.mapId ?? '')?.name ?? tr('Bilinmeyen Harita'),
+      agentName: this.assets.agent(me.characterId ?? '')?.name ?? '?',
+      startMillis: d.matchInfo?.gameStartMillis ?? 0,
+      events
+    }
   }
 
   /** Synced local history, newest first. */

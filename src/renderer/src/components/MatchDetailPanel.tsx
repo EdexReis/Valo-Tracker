@@ -1,11 +1,62 @@
 import { useEffect, useState } from 'react'
-import { Loader2, Skull } from 'lucide-react'
-import type { MatchDetail, RoundInfo } from '@shared/types'
+import { Download, Loader2, Skull } from 'lucide-react'
+import type { MatchDetail, RoundInfo, TimelineFormat } from '@shared/types'
 import Heatmap from './Heatmap'
 import { tr } from '@shared/i18n'
 
 const TYPE_LABEL = { pistol: 'Pistol', eco: 'Eco', force: 'Force', full: 'Full buy' } as const
 const TYPE_SHORT = { pistol: 'P', eco: 'E', force: 'F', full: 'B' } as const
+
+function TimelineExport({ matchId }: { matchId: string }): JSX.Element {
+  const [format, setFormat] = useState<TimelineFormat>('csv')
+  const [offset, setOffset] = useState(0)
+  const [pre, setPre] = useState(5)
+  const [post, setPost] = useState(3)
+  const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null)
+
+  const run = async (): Promise<void> => {
+    setNote(null)
+    const r = await window.api.exportTimeline(matchId, format, { offsetSec: offset, preRollSec: pre, postRollSec: post })
+    if (r.ok) setNote({ ok: true, text: tr('Kaydedildi: {path}', { path: r.path ?? '' }) })
+    else if (!r.canceled) setNote({ ok: false, text: r.error ?? '' })
+  }
+
+  const input = 'w-16 rounded border border-val-line bg-val-bg px-1.5 py-1 text-right text-sm outline-none focus:border-val-red'
+  return (
+    <div>
+      <h3 className="mb-1 text-xs font-bold uppercase tracking-widest text-val-mute">{tr('Zaman damgalarını dışa aktar')}</h3>
+      <p className="mb-2 max-w-xl text-[11px] text-val-mute">
+        {tr('Kill ve ölüm anlarını video kaydında işaret olarak kullan. 0:00 maçın başlangıcıdır; kaydın başladığı an farklıysa kaymayı ayarla.')}
+      </p>
+      <div className="flex flex-wrap items-end gap-3 text-xs text-val-mute">
+        <label className="space-y-1">
+          <span>{tr('Dosya türü')}</span>
+          <select value={format} onChange={(e) => setFormat(e.target.value as TimelineFormat)} className="block rounded border border-val-line bg-val-bg px-2 py-1 text-sm text-val-text outline-none focus:border-val-red">
+            <option value="csv">{tr('CSV (tablo)')}</option>
+            <option value="txt">{tr('Bölümler (.txt)')}</option>
+            <option value="json">JSON</option>
+          </select>
+        </label>
+        <label className="space-y-1">
+          <span>{tr('Kayma (sn)')}</span>
+          <input type="number" value={offset} onChange={(e) => setOffset(Number(e.target.value) || 0)} className={`block ${input}`} />
+        </label>
+        <label className="space-y-1">
+          <span>{tr('Önce (sn)')}</span>
+          <input type="number" min={0} value={pre} onChange={(e) => setPre(Math.max(0, Number(e.target.value) || 0))} className={`block ${input}`} />
+        </label>
+        <label className="space-y-1">
+          <span>{tr('Sonra (sn)')}</span>
+          <input type="number" min={0} value={post} onChange={(e) => setPost(Math.max(0, Number(e.target.value) || 0))} className={`block ${input}`} />
+        </label>
+        <button onClick={() => void run()} className="flex items-center gap-1.5 rounded border border-val-line px-3 py-1.5 text-sm font-semibold text-val-text hover:bg-val-raised">
+          <Download size={14} /> {tr('Dışa aktar')}
+        </button>
+      </div>
+      {note && <p className={`mt-2 select-text text-xs ${note.ok ? 'text-emerald-400' : 'text-val-red'}`}>{note.text}</p>}
+    </div>
+  )
+}
 
 function RoundChip({ r }: { r: RoundInfo }): JSX.Element {
   const tip = [
@@ -107,6 +158,8 @@ export default function MatchDetailPanel({ matchId }: { matchId: string }): JSX.
             )}
           </div>
         )}
+
+        <TimelineExport matchId={matchId} />
       </div>
 
       <Heatmap minimap={detail.mapIcon} deaths={detail.deaths} kills={detail.kills} />

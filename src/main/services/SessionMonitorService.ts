@@ -32,6 +32,10 @@ export class SessionMonitorService {
     this.startedAt = Date.now()
   }
 
+  get sessionStartMs(): number {
+    return this.startedAt
+  }
+
   sessionHours(): number {
     return (Date.now() - this.startedAt) / 3_600_000
   }

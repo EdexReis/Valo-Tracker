@@ -1,11 +1,12 @@
 import path from 'node:path'
 import { BrowserWindow, globalShortcut, screen } from 'electron'
-import type { OverlayCorner } from '@shared/types'
+import type { OverlayCorner, OverlayMode } from '@shared/types'
 import { log } from './logger'
 import { tr } from '@shared/i18n'
 
 const WIDTH = 340
-const HEIGHT = 560
+/** Window height per content: player list, personal panel, both stacked. */
+const HEIGHTS: Record<OverlayMode, number> = { players: 380, me: 220, both: 580 }
 const MARGIN = 16
 /**
  * globalShortcut only reports key-down, never key-up. While the keys stay held the OS auto-repeats
@@ -23,12 +24,13 @@ export class OverlayWindowManager {
   private gameActive = false
   private corner: OverlayCorner = 'tr'
   private opacity = 1
+  private height = HEIGHTS.players
 
   /** Creates the always-hidden, click-through overlay window. */
   create(preloadPath: string): void {
     const win = new BrowserWindow({
       width: WIDTH,
-      height: HEIGHT,
+      height: this.height,
       show: false,
       transparent: true,
       frame: false,
@@ -52,11 +54,13 @@ export class OverlayWindowManager {
   }
 
   /** Applies user settings: on/off and the accelerator. */
-  configure(enabled: boolean, shortcut: string, corner: OverlayCorner, opacity: number): void {
+  configure(enabled: boolean, shortcut: string, corner: OverlayCorner, opacity: number, mode: OverlayMode): void {
     this.enabled = enabled
     this.shortcut = shortcut
     this.corner = corner
     this.opacity = opacity
+    this.height = HEIGHTS[mode] ?? HEIGHTS.players
+    if (this.win && !this.win.isDestroyed()) this.win.setSize(WIDTH, this.height)
     this.unregister()
     this.refresh()
   }
@@ -97,7 +101,7 @@ export class OverlayWindowManager {
       const { x, y, width, height } = screen.getPrimaryDisplay().bounds
       const left = this.corner.endsWith('l')
       const top = this.corner.startsWith('t')
-      win.setPosition(left ? x + MARGIN : x + width - WIDTH - MARGIN, top ? y + MARGIN : y + height - HEIGHT - MARGIN)
+      win.setPosition(left ? x + MARGIN : x + width - WIDTH - MARGIN, top ? y + MARGIN : y + height - this.height - MARGIN)
       win.setOpacity(this.opacity)
       win.showInactive()
     }

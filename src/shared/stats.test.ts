@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { MatchSummary } from './types'
 import {
   bestAgentOnMap,
+  buildOverlayMe,
   buildWeeklyReport,
   coPlayerStats,
   computeBadges,
@@ -176,5 +177,38 @@ describe('coPlayerStats', () => {
     const rows = coPlayerStats(list, mates, 1)
     expect(rows[0].puuid).toBe('duo')
     expect(rows.map((r) => r.games)).toEqual([3, 1, 1])
+  })
+})
+
+describe('buildOverlayMe', () => {
+  const list = [
+    match(1, 'win', { mapName: 'Ascent', agentName: 'Jett', acs: 240, kills: 20, deaths: 10 }),
+    match(2, 'loss', { mapName: 'Ascent', agentName: 'Jett' }),
+    match(3, 'win', { mapName: 'Ascent', agentName: 'Sage' }),
+    match(4, 'draw', { mapName: 'Ascent' }),
+    match(5, 'win', { mapName: 'Bind', agentName: 'Jett' }),
+    match(30, 'loss', { mapName: 'Ascent', agentName: 'Jett' }) // played long before this session
+  ]
+  const me = buildOverlayMe(list, { sessionStart: NOW - 6 * HOUR, map: 'Ascent', agent: 'Jett' })
+
+  it('counts only the matches of this session', () => {
+    expect(me.sessionWins).toBe(3)
+    expect(me.sessionLosses).toBe(1)
+  })
+
+  it('lists the last matches without draws, newest first', () => {
+    expect(me.recent.map((r) => r.result)).toEqual(['win', 'loss', 'win', 'win', 'loss'])
+    expect(me.recentAvg?.acs).toBeGreaterThan(0)
+  })
+
+  it('computes the win rate on the map and with the agent (ranked games only)', () => {
+    expect(me.onMap).toEqual({ map: 'Ascent', games: 4, winRate: 50 })
+    expect(me.withAgent).toEqual({ agent: 'Jett', games: 3, winRate: 33 })
+  })
+
+  it('leaves map and agent empty when there is no current match', () => {
+    const none = buildOverlayMe(list, { sessionStart: NOW })
+    expect(none.onMap).toBeNull()
+    expect(none.withAgent).toBeNull()
   })
 })

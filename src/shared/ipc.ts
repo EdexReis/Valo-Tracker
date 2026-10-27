@@ -27,6 +27,8 @@ export const IPC = {
   importBackup: 'backup:import',
   testAI: 'ai:test',
   getCoPlayers: 'co-players:get',
+  getOverlayMe: 'overlay-me:get',
+  exportTimeline: 'timeline:export',
   getDiscordWebhook: 'discord-webhook:get',
   saveDiscordWebhook: 'discord-webhook:save',
   testDiscordWebhook: 'discord-webhook:test',

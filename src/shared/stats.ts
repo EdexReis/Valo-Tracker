@@ -1,4 +1,4 @@
-import type { MatchSummary } from './types'
+import type { MatchSummary, OverlayMeStats } from './types'
 import { tr } from './i18n'
 
 export const RANKED_QUEUES = ['competitive', 'unrated']
@@ -329,4 +329,28 @@ export function coPlayerStats(
       avgVts: Math.round(avg(a.vts))
     }))
     .sort((x, y) => y.games - x.games || y.winRate - x.winRate)
+}
+
+/** The parts of the overlay's personal panel that come from the saved match history. */
+export function buildOverlayMe(
+  newestFirst: MatchSummary[],
+  opts: { sessionStart: number; map?: string; agent?: string }
+): Pick<OverlayMeStats, 'sessionWins' | 'sessionLosses' | 'recent' | 'recentAvg' | 'onMap' | 'withAgent'> {
+  const decided = newestFirst.filter((m) => m.result !== 'draw')
+  const session = decided.filter((m) => m.startMillis >= opts.sessionStart - 30 * 60 * 1000)
+  const recent = decided.slice(0, 5)
+  const ranked = decided.filter(isRankedLike)
+  const rate = (ms: MatchSummary[]): number => Math.round((ms.filter((m) => m.result === 'win').length / Math.max(1, ms.filter((m) => m.result !== 'draw').length)) * 100)
+
+  const onMapList = opts.map ? ranked.filter((m) => m.mapName === opts.map) : []
+  const withAgentList = opts.agent ? onMapList.filter((m) => m.agentName === opts.agent) : []
+  const t = totals(recent)
+  return {
+    sessionWins: session.filter((m) => m.result === 'win').length,
+    sessionLosses: session.filter((m) => m.result === 'loss').length,
+    recent: recent.map((m) => ({ result: m.result as 'win' | 'loss', vts: m.vts?.score ?? null })),
+    recentAvg: recent.length ? { kd: t.kd, acs: t.acs, vts: t.vts } : null,
+    onMap: opts.map && onMapList.length ? { map: opts.map, games: onMapList.length, winRate: rate(onMapList) } : null,
+    withAgent: opts.agent && withAgentList.length ? { agent: opts.agent, games: withAgentList.length, winRate: rate(withAgentList) } : null
+  }
 }

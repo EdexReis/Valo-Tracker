@@ -213,6 +213,10 @@ export class AssetCacheService {
     return { x: Math.round(x * 1000) / 1000, y: Math.round(y * 1000) / 1000 }
   }
 
+  weaponName(uuid: string): string | undefined {
+    return this.weapons.find((w) => w.uuid === uuid.toLowerCase())?.name
+  }
+
   get activeSeasonId(): string | null {
     return this.activeSeason
   }

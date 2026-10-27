@@ -12,13 +12,17 @@ import type {
   CoPlayerRow,
   ExportResult,
   InstalockSettings,
+  TimelineExportOptions,
+  TimelineFormat,
+  OverlayMeStats,
   StatsPayload,
   TelegramInput,
   WindowAction
 } from '@shared/types'
 import { IPC } from '@shared/ipc'
 import { REGION_OPTIONS, SHORTCUT_OPTIONS } from '@shared/options'
-import { coPlayerStats, isRankedLike } from '@shared/stats'
+import { buildOverlayMe, coPlayerStats, isRankedLike } from '@shared/stats'
+import { buildMarkers, markersToChapters, markersToCsv } from '@shared/timeline'
 import { setRegion } from './constants'
 import { getLogHistory, log, logBus } from './logger'
 import { AuthService } from './services/AuthService'
@@ -294,7 +298,8 @@ function wire(): void {
     overlayCorner: ['tr', 'tl', 'br', 'bl'].includes(s.overlayCorner) ? s.overlayCorner : 'tr',
     overlayOpacity: Math.min(1, Math.max(0.4, Number(s.overlayOpacity) || 1)),
     aiUrl: safeAiUrl(String(s.aiUrl || APP_DEFAULTS.aiUrl)),
-    aiModel: String(s.aiModel ?? '').slice(0, 120)
+    aiModel: String(s.aiModel ?? '').slice(0, 120),
+    overlayMode: ['players', 'me', 'both'].includes(s.overlayMode) ? s.overlayMode : 'players'
   })
   const applyApp = (cfg: AppSettings): void => {
     const languageChanged = getLanguage() !== cfg.language
@@ -309,7 +314,7 @@ function wire(): void {
     rpc.setEnabled(cfg.discordRpc)
     light.configure(cfg.lightMode)
     if (!cfg.musicControl && music.isHoldingPause) void music.resume() // switched off mid-match: give the music back
-    overlay.configure(cfg.overlayEnabled, cfg.overlayShortcut, cfg.overlayCorner, cfg.overlayOpacity)
+    overlay.configure(cfg.overlayEnabled, cfg.overlayShortcut, cfg.overlayCorner, cfg.overlayOpacity, cfg.overlayMode)
   }
   applyApp(settings.getApp())
 
@@ -509,6 +514,41 @@ function wire(): void {
     const id = account()
     const latest = id ? history.matches(id)[0] : undefined
     return latest ? webhook.sendMatch(latest) : { ok: false, error: tr('Kayıtlı maç yok.') }
+  })
+  ipcMain.handle(IPC.exportTimeline, async (_e, matchId: string, format: TimelineFormat, raw: TimelineExportOptions): Promise<ExportResult> => {
+    const num = (v: unknown, lo: number, hi: number, fallback: number): number => Math.min(hi, Math.max(lo, Number.isFinite(Number(v)) ? Number(v) : fallback))
+    const opts = { offsetSec: num(raw?.offsetSec, -3600, 3600, 0), preRollSec: num(raw?.preRollSec, 0, 120, 5), postRollSec: num(raw?.postRollSec, 0, 120, 3) }
+    try {
+      const timeline = await matches.getTimeline(String(matchId))
+      if (!timeline.events.length) return { ok: false, error: tr('Bu maçta işaretlenecek kill veya ölüm bulunamadı.') }
+      const markers = buildMarkers(timeline, opts)
+      const ext = format === 'json' ? 'json' : format === 'txt' ? 'txt' : 'csv'
+      const pick = await dialog.showSaveDialog(win!, { defaultPath: `valo-tracker-${timeline.mapName.toLowerCase()}-${new Date(timeline.startMillis || Date.now()).toISOString().slice(0, 10)}.${ext}` })
+      if (pick.canceled || !pick.filePath) return { ok: false, canceled: true }
+      const body =
+        ext === 'json'
+          ? JSON.stringify({ match: { id: timeline.matchId, map: timeline.mapName, agent: timeline.agentName, start: new Date(timeline.startMillis).toISOString() }, options: opts, markers }, null, 2)
+          : ext === 'txt'
+            ? markersToChapters(markers)
+            : '\uFEFF' + markersToCsv(markers)
+      await writeFile(pick.filePath, body, 'utf8')
+      return { ok: true, path: pick.filePath }
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
+  })
+  ipcMain.handle(IPC.getOverlayMe, (): OverlayMeStats => {
+    const id = account()
+    const live = core.current
+    const self = live?.players.find((p) => p.isSelf)
+    const base = buildOverlayMe(id ? history.matches(id) : [], { sessionStart: monitor.sessionStartMs, map: live?.mapName, agent: self?.agentName })
+    const last = id ? history.rr(id).at(-1) : undefined
+    const rank = self?.mmr
+      ? { tier: self.mmr.currentTier, rr: self.mmr.currentRR, name: self.mmr.currentTierName, icon: self.mmr.currentTierIcon }
+      : last
+        ? { tier: last.tier, rr: last.rr, name: assets.tier(last.tier).name, icon: assets.tier(last.tier).icon }
+        : null
+    return { ...base, rank, sessionRR: tilt.state.ready ? tilt.state.delta : null, hours: monitor.sessionHours() }
   })
   ipcMain.handle(IPC.getCoPlayers, async (): Promise<CoPlayerRow[]> => {
     const id = account()
