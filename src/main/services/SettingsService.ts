@@ -35,7 +35,8 @@ export const APP_DEFAULTS: AppSettings = {
   discordMatchSummary: true,
   language: 'tr',
   lightMode: true,
-  overlayMode: 'players'
+  overlayMode: 'players',
+  playerStats: false
 }
 
 interface TelegramStored {

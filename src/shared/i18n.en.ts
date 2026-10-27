@@ -525,6 +525,21 @@ export const en: Record<string, string> = {
   "Önce (sn)": "Before (s)",
   "Sonra (sn)": "After (s)",
 
+  // ---- player stats
+  "Oyuncu istatistikleri": "Player stats",
+  "Canlı maçta her oyuncunun son 5 maçından K/D, ACS, HS% ve kazanma oranını gösterir. Çok sayıda ek istek yapar; önermiyoruz.": "Shows K/D, ACS, HS% and win rate from each player's last 5 matches in the live match. Makes many extra requests; not recommended.",
+  "Oyuncu istatistikleri:": "Player stats:",
+  "Maçtaki herkesin maç geçmişini ardı ardına sorgular. Bu yoğun istek trafiği Riot tarafından otomasyon olarak algılanabilir. Yayıncı modundaki oyuncular için hiçbir veri çekilmez.": "Queries everyone's match history in quick succession. Riot may detect this heavy request traffic as automation. No data is fetched for players in streamer mode.",
+  "Bu özellik maçtaki herkesin son maçlarını sorgular (yaklaşık 50 istek). Riot yoğun istekleri otomasyon olarak görebilir ve hesabına yönelik risk taşıyabilir; önermiyoruz. Yine de açmak istiyor musun?": "This feature queries everyone's recent matches (about 50 requests). Riot may see heavy requests as automation, which can put your account at risk; not recommended. Do you still want to turn it on?",
+  "İstatistikler yükleniyor…": "Loading stats…",
+  "Yayıncı modu: istatistik yok": "Streamer mode: no stats",
+  "Yeterli maç verisi yok": "Not enough match data",
+  "Son {n} maç (derece/derecesiz)": "Last {n} matches (ranked/unrated)",
+  "son {n} maç": "last {n} matches",
+  "Önceki sezonlar": "Past acts",
+  "Oyuncuların K/D, ACS, HS% ve kazanma oranını da görmek ister misin? (Ek istek yapar, riskli olabilir)": "Want to see players' K/D, ACS, HS% and win rate too? (Makes extra requests, may be risky)",
+  "Etkinleştir": "Enable",
+
   // ---- misc
   "Başlangıç": "Start"
 }

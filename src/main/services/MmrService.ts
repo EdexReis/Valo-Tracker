@@ -3,11 +3,12 @@ import { REGION } from '../constants'
 import type { AuthService } from './AuthService'
 import type { AssetCacheService } from './AssetCacheService'
 import { tr } from '@shared/i18n'
+import { analyzeSeasons, shortSeasonName, type SeasonEntry } from '@shared/ranks'
 
 interface MmrResponse {
   QueueSkills?: {
     competitive?: {
-      SeasonalInfoBySeasonID?: Record<string, { CompetitiveTier?: number; RankedRating?: number }> | null
+      SeasonalInfoBySeasonID?: Record<string, SeasonEntry> | null
     }
   }
 }
@@ -53,7 +54,7 @@ export class MmrService {
   }
 
   private async getOne(puuid: string): Promise<PlayerMmr> {
-    let seasons: NonNullable<NonNullable<MmrResponse['QueueSkills']>['competitive']>['SeasonalInfoBySeasonID'] = null
+    let seasons: Record<string, SeasonEntry> | null | undefined = null
     try {
       const res = await this.auth.remote<MmrResponse>('GET', `${REGION.pd}/mmr/v1/players/${puuid}`)
       seasons = res.QueueSkills?.competitive?.SeasonalInfoBySeasonID
@@ -61,24 +62,27 @@ export class MmrService {
       /* treat as unranked */
     }
 
-    const active = this.assets.activeSeasonId ? seasons?.[this.assets.activeSeasonId] : undefined
-    const currentTier = active?.CompetitiveTier ?? 0
-    const currentRR = currentTier > 0 ? (active?.RankedRating ?? 0) : 0
+    const a = analyzeSeasons(seasons, this.assets.activeSeasonId, (id) => this.assets.season(id)?.start ?? 0)
+    const seasonLabel = (id: string | null): string | null => {
+      const name = id ? this.assets.season(id)?.name : null
+      return name ? shortSeasonName(name) : null
+    }
 
-    let peakTier = 0
-    for (const s of Object.values(seasons ?? {})) peakTier = Math.max(peakTier, s?.CompetitiveTier ?? 0)
-    peakTier = Math.max(peakTier, currentTier)
-
-    const cur = this.assets.tier(currentTier)
-    const peak = this.assets.tier(peakTier)
+    const cur = this.assets.tier(a.currentTier)
+    const peak = this.assets.tier(a.peakTier)
     return {
-      currentTier,
-      currentRR,
-      peakTier,
+      currentTier: a.currentTier,
+      currentRR: a.currentRR,
+      peakTier: a.peakTier,
       currentTierName: cur.name,
       currentTierIcon: cur.icon,
       peakTierName: peak.name,
-      peakTierIcon: peak.icon
+      peakTierIcon: peak.icon,
+      peakSeason: seasonLabel(a.peakSeasonId),
+      pastRanks: a.past.map((p) => {
+        const info = this.assets.tier(p.tier)
+        return { season: seasonLabel(p.seasonId) ?? '?', tier: p.tier, tierName: info.name, tierIcon: info.icon }
+      })
     }
   }
 }

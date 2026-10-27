@@ -71,10 +71,25 @@ export interface PlayerMmr {
   currentTierIcon: string | null
   peakTierName: string
   peakTierIcon: string | null
+  /** act the peak was reached in, e.g. "E9 A2" */
+  peakSeason: string | null
+  /** last finished acts with a rank, newest first */
+  pastRanks: Array<{ season: string; tier: number; tierName: string; tierIcon: string | null }>
+}
+
+/** Recent form from the player's last few ranked/unrated matches */
+export interface PlayerStats {
+  games: number
+  kd: number
+  acs: number
+  hsPercent: number
+  winRate: number
 }
 
 export interface MatchPlayer {
   mmr: PlayerMmr | null
+  /** undefined = not loaded yet, null = unavailable (hidden, no matches or disabled) */
+  stats?: PlayerStats | null
   /** Crosshair share code when the loadout response carries one */
   crosshairCode: string | null
   puuid: string
@@ -332,6 +347,8 @@ export interface AppSettings {
   lightMode: boolean
   /** what the overlay shows while the shortcut is held */
   overlayMode: OverlayMode
+  /** load recent K/D, ACS, HS% and win rate of every player in the match (extra requests: off by default) */
+  playerStats: boolean
 }
 
 export interface RRPoint {

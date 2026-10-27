@@ -124,6 +124,19 @@ function GeneralPanel(): JSX.Element {
       >
         <Toggle on={s.lightMode} onChange={(v) => updateApp({ lightMode: v })} label={tr('Oyun içi hafiflik modu')} />
       </Row>
+      <Row
+        title={tr('Oyuncu istatistikleri')}
+        hint={tr('Canlı maçta her oyuncunun son 5 maçından K/D, ACS, HS% ve kazanma oranını gösterir. Çok sayıda ek istek yapar; önermiyoruz.')}
+      >
+        <Toggle
+          on={s.playerStats}
+          onChange={(v) => {
+            if (v && !window.confirm(PLAYER_STATS_WARNING())) return
+            updateApp({ playerStats: v })
+          }}
+          label={tr('Oyuncu istatistikleri')}
+        />
+      </Row>
       <Row title={tr('Windows bildirimleri')} hint={tr('Wishlist, mola ve AI koç bildirimleri Windows\'ta da gösterilir.')}>
         <Toggle on={s.nativeNotifications} onChange={(v) => updateApp({ nativeNotifications: v })} label={tr('Bildirimler')} />
       </Row>
@@ -157,6 +170,9 @@ function GeneralPanel(): JSX.Element {
   )
 }
 
+export const PLAYER_STATS_WARNING = (): string =>
+  tr('Bu özellik maçtaki herkesin son maçlarını sorgular (yaklaşık 50 istek). Riot yoğun istekleri otomasyon olarak görebilir ve hesabına yönelik risk taşıyabilir; önermiyoruz. Yine de açmak istiyor musun?')
+
 function RiskPanel(): JSX.Element {
   return (
     <section className="space-y-3 rounded border border-orange-500/50 bg-orange-500/10 p-5">
@@ -172,6 +188,9 @@ function RiskPanel(): JSX.Element {
         </li>
         <li>
           <span className="font-semibold">{tr('Dodge asistanı:')}</span> {tr('Başka oyuncuların maç geçmişini okur. Riot\'un politikası izin vermemiş oyuncuların istatistiklerini göstermeyi kısıtlar.')}
+        </li>
+        <li>
+          <span className="font-semibold">{tr('Oyuncu istatistikleri:')}</span> {tr('Maçtaki herkesin maç geçmişini ardı ardına sorgular. Bu yoğun istek trafiği Riot tarafından otomasyon olarak algılanabilir. Yayıncı modundaki oyuncular için hiçbir veri çekilmez.')}
         </li>
         <li>
           <span className="font-semibold">{tr('Overlay:')}</span> {tr('Oyunun üstüne pencere çizer. Vanguard bu konuda garanti vermez; yalnızca "pencereli tam ekran" modunda görünür.')}

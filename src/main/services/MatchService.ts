@@ -73,6 +73,8 @@ export class MatchService {
     if (!d) {
       d = await this.auth.remote('GET', `${REGION.pd}/match-details/v1/matches/${matchId}`)
       this.details.set(matchId, d)
+      // Looking at other players pulls in many matches: keep only the newest ones in memory.
+      if (this.details.size > 60) this.details.delete(this.details.keys().next().value as string)
     }
     return d
   }

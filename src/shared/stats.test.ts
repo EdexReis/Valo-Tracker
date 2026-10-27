@@ -10,6 +10,7 @@ import {
   isoWeekKey,
   losingStreak,
   projectRank,
+  summarizePlayerStats,
   totals,
   weaponStats
 } from './stats'
@@ -210,5 +211,21 @@ describe('buildOverlayMe', () => {
     const none = buildOverlayMe(list, { sessionStart: NOW })
     expect(none.onMap).toBeNull()
     expect(none.withAgent).toBeNull()
+  })
+})
+
+describe('summarizePlayerStats', () => {
+  it('returns null without usable matches', () => {
+    expect(summarizePlayerStats([])).toBeNull()
+    expect(summarizePlayerStats([match(1, 'draw')])).toBeNull()
+  })
+
+  it('aggregates K/D over all kills and deaths and averages the rest', () => {
+    const s = summarizePlayerStats([
+      match(1, 'win', { kills: 20, deaths: 10, acs: 300, hsPercent: 30 }),
+      match(2, 'loss', { kills: 10, deaths: 20, acs: 100, hsPercent: 10 }),
+      match(3, 'win', { kills: 15, deaths: 15, acs: 200, hsPercent: 20 })
+    ])
+    expect(s).toEqual({ games: 3, kd: 1, acs: 200, hsPercent: 20, winRate: 67 })
   })
 })

@@ -50,6 +50,7 @@ import { LocalAICoachService } from './services/LocalAICoachService'
 import { startUpdater } from './services/UpdateService'
 import { MmrService } from './services/MmrService'
 import { CoreGameService } from './services/CoreGameService'
+import { PlayerStatsService } from './services/PlayerStatsService'
 import { getLanguage, locale, setLanguage, tr } from '@shared/i18n'
 
 let win: BrowserWindow | null = null
@@ -152,6 +153,7 @@ function wire(): void {
   let matchStart: { id: string; ts: number } | null = null
   const mmr = new MmrService(auth, assets)
   const matches = new MatchService(auth, assets, history)
+  const playerStats = new PlayerStatsService(matches)
   const pregame = new PregameService(
     auth,
     assets,
@@ -185,7 +187,7 @@ function wire(): void {
       state: me ? `${me.agentName}${me.mmr ? ` (${title(me.mmr.currentTierName)})` : ''}` : tr('Maçta'),
       startTimestamp: matchStart.ts
     })
-  }, () => light.active)
+  }, () => light.active, playerStats, () => settings.getApp().playerStats)
 
   const storefront = new StorefrontService(auth, assets)
   const telegram = new TelegramService(settings)
@@ -299,8 +301,10 @@ function wire(): void {
     overlayOpacity: Math.min(1, Math.max(0.4, Number(s.overlayOpacity) || 1)),
     aiUrl: safeAiUrl(String(s.aiUrl || APP_DEFAULTS.aiUrl)),
     aiModel: String(s.aiModel ?? '').slice(0, 120),
-    overlayMode: ['players', 'me', 'both'].includes(s.overlayMode) ? s.overlayMode : 'players'
+    overlayMode: ['players', 'me', 'both'].includes(s.overlayMode) ? s.overlayMode : 'players',
+    playerStats: s.playerStats === true
   })
+  let statsWas = false
   const applyApp = (cfg: AppSettings): void => {
     const languageChanged = getLanguage() !== cfg.language
     setLanguage(cfg.language)
@@ -315,6 +319,10 @@ function wire(): void {
     light.configure(cfg.lightMode)
     if (!cfg.musicControl && music.isHoldingPause) void music.resume() // switched off mid-match: give the music back
     overlay.configure(cfg.overlayEnabled, cfg.overlayShortcut, cfg.overlayCorner, cfg.overlayOpacity, cfg.overlayMode)
+    if (cfg.playerStats !== statsWas) {
+      statsWas = cfg.playerStats
+      core.refreshStats()
+    }
   }
   applyApp(settings.getApp())
 
@@ -496,7 +504,7 @@ function wire(): void {
       }
       if (!data || typeof data !== 'object' || data.app === undefined) return { ok: false, error: tr('Bu bir Valo Tracker yedeği değil.') }
       // A file from elsewhere must not switch the risky features on: the risk acknowledgement is always asked again.
-      const saved = settings.saveApp(sanitizeApp({ ...APP_DEFAULTS, ...data.app, instalockRiskAck: false, onboardingDone: true }))
+      const saved = settings.saveApp(sanitizeApp({ ...APP_DEFAULTS, ...data.app, instalockRiskAck: false, playerStats: false, onboardingDone: true }))
       if (data.instalock) settings.save(data.instalock)
       if (Array.isArray(data.crosshairs)) crosshairs.replace(data.crosshairs)
       if (Array.isArray(data.wishlist)) wishlist.replace(data.wishlist)

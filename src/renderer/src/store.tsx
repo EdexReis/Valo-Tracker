@@ -66,7 +66,8 @@ export function AppProvider({ children }: { children: ReactNode }): JSX.Element 
     discordMatchSummary: true,
     language: 'tr',
     lightMode: true,
-    overlayMode: 'players'
+    overlayMode: 'players',
+    playerStats: false
   })
   const [appLoaded, setAppLoaded] = useState(false)
   // Set during render so every child already renders in the right language (App remounts on change).

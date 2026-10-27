@@ -1,4 +1,4 @@
-import type { MatchSummary, OverlayMeStats } from './types'
+import type { MatchSummary, OverlayMeStats, PlayerStats } from './types'
 import { tr } from './i18n'
 
 export const RANKED_QUEUES = ['competitive', 'unrated']
@@ -352,5 +352,21 @@ export function buildOverlayMe(
     recentAvg: recent.length ? { kd: t.kd, acs: t.acs, vts: t.vts } : null,
     onMap: opts.map && onMapList.length ? { map: opts.map, games: onMapList.length, winRate: rate(onMapList) } : null,
     withAgent: opts.agent && withAgentList.length ? { agent: opts.agent, games: withAgentList.length, winRate: rate(withAgentList) } : null
+  }
+}
+
+/** Recent form of another player, from their last few matches (newest first). */
+export function summarizePlayerStats(newestFirst: MatchSummary[]): PlayerStats | null {
+  const ms = newestFirst.filter((m) => m.result !== 'draw' && m.rounds > 0)
+  if (ms.length === 0) return null
+  const kills = ms.reduce((s, m) => s + m.kills, 0)
+  const deaths = ms.reduce((s, m) => s + m.deaths, 0)
+  const avg = (f: (m: MatchSummary) => number): number => ms.reduce((s, m) => s + f(m), 0) / ms.length
+  return {
+    games: ms.length,
+    kd: Math.round((kills / Math.max(1, deaths)) * 100) / 100,
+    acs: Math.round(avg((m) => m.acs)),
+    hsPercent: Math.round(avg((m) => m.hsPercent)),
+    winRate: Math.round((ms.filter((m) => m.result === 'win').length / ms.length) * 100)
   }
 }

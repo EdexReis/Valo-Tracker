@@ -4,10 +4,12 @@ import { log } from '../logger'
 import { HttpError, type AuthService } from './AuthService'
 import type { AssetCacheService } from './AssetCacheService'
 import type { MmrService } from './MmrService'
+import type { PlayerStatsService } from './PlayerStatsService'
 import { tr } from '@shared/i18n'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const SCAN_COOLDOWN_MS = 8000
+const STATS_WORKERS = 3
 
 /** Finds a crosshair share code anywhere in a loadout entry (the field name is not documented). */
 function findCrosshair(node: any, depth = 0): string | null {
@@ -32,7 +34,10 @@ export class CoreGameService {
     private mmr: MmrService,
     private onUpdate: (match: MatchSnapshot | null) => void,
     /** true while light mode is on: socket events then no longer trigger re-scans of a known match */
-    private isLight: () => boolean = () => false
+    private isLight: () => boolean = () => false,
+    private playerStats: PlayerStatsService | null = null,
+    /** the user opted in to loading other players' recent stats */
+    private statsEnabled: () => boolean = () => false
   ) {}
 
   get current(): MatchSnapshot | null {
@@ -99,6 +104,7 @@ export class CoreGameService {
           agentName: agent?.name ?? '?',
           agentIcon: agent?.icon ?? null,
           mmr: mmrById[id] ?? null,
+          stats: this.statsFor(id, id === puuid, p.PlayerIdentity?.Incognito === true),
           crosshairCode: findCrosshair(loadoutById.get(id)),
           weapons: this.resolveWeapons(loadoutById.get(id)?.Loadout ?? loadoutById.get(id))
         }
@@ -120,6 +126,7 @@ export class CoreGameService {
       this.last = snapshot
       this.lastScanAt = Date.now()
       this.onUpdate(snapshot)
+      void this.fillStats(snapshot)
       log('CoreGame', 'success', tr('Maç tarandı: {map} ({n} oyuncu)', { map: snapshot.mapName, n: players.length }))
       return snapshot
     } catch (e) {
@@ -130,6 +137,38 @@ export class CoreGameService {
       log('CoreGame', 'error', tr('Tarama hatası: {msg}', { msg: (e as Error).message }))
       return this.last
     }
+  }
+
+  /** Applies a change of the stats setting to the match that is already on screen. */
+  refreshStats(): void {
+    const cur = this.last
+    if (!cur) return
+    const players = cur.players.map((p) => ({ ...p, stats: this.statsFor(p.puuid, p.isSelf, p.isStreamerMode) }))
+    this.last = { ...cur, players }
+    this.onUpdate(this.last)
+    void this.fillStats(this.last)
+  }
+
+  /** null = not available, undefined = still to load. Players in streamer mode never get stats (except oneself). */
+  private statsFor(puuid: string, isSelf: boolean, incognito: boolean): MatchPlayer['stats'] {
+    if (!this.playerStats || !this.statsEnabled() || (incognito && !isSelf)) return null
+    return this.playerStats.peek(puuid)
+  }
+
+  private async fillStats(snapshot: MatchSnapshot): Promise<void> {
+    const svc = this.playerStats
+    if (!svc || !this.statsEnabled()) return
+    const queue = snapshot.players.filter((p) => p.stats === undefined).map((p) => p.puuid)
+    const worker = async (): Promise<void> => {
+      for (let id = queue.shift(); id; id = queue.shift()) {
+        const stats = await svc.load(id)
+        const cur = this.last
+        if (!cur || cur.matchId !== snapshot.matchId || !this.statsEnabled()) return // match ended or setting turned off
+        this.last = { ...cur, players: cur.players.map((p) => (p.puuid === id ? { ...p, stats } : p)) }
+        this.onUpdate(this.last)
+      }
+    }
+    await Promise.all(Array.from({ length: STATS_WORKERS }, worker))
   }
 
   private resolveWeapons(loadout: any): WeaponLoadout[] {
