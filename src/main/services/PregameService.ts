@@ -5,6 +5,7 @@ import { HttpError, type AuthService } from './AuthService'
 import type { MatchService } from './MatchService'
 import type { AssetCacheService } from './AssetCacheService'
 import type { SettingsService } from './SettingsService'
+import { tr } from '@shared/i18n'
 
 const MAX_ATTEMPTS = 3
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
@@ -35,10 +36,10 @@ export class PregameService {
       .map((p) => (this.assets.agent(p.CharacterID!)?.role ?? '').toLowerCase())
     const messages: string[] = []
     if (roles.filter((r) => r === 'duelist').length >= 3) {
-      messages.push('Takımda 3 veya daha fazla Düellocu var! Kazanma şansınız düşebilir.')
+      messages.push(tr('Takımda 3 veya daha fazla Düellocu var! Kazanma şansınız düşebilir.'))
     }
     if (players.length > 0 && roles.length === players.length && !roles.includes('controller')) {
-      messages.push('Takımda görüş engelleyici (Smoke) yok! Kazanma şansınız düşebilir.')
+      messages.push(tr('Takımda görüş engelleyici (Smoke) yok! Kazanma şansınız düşebilir.'))
     }
     const next = messages.length ? { messages } : null
     if (JSON.stringify(next) === JSON.stringify(this.compWarning)) return
@@ -72,11 +73,11 @@ export class PregameService {
           const recent = await this.matches.getMatchHistory(puuid, 3, ['competitive', 'unrated'])
           if (recent.length < 3) return
           const reasons: string[] = []
-          if (recent.every((m) => m.result === 'loss')) reasons.push("Son 3 maçın 3'ünü kaybetti")
+          if (recent.every((m) => m.result === 'loss')) reasons.push(tr('Son 3 maçın 3\'ünü kaybetti'))
           const kills = recent.reduce((a, m) => a + m.kills, 0)
           const deaths = recent.reduce((a, m) => a + m.deaths, 0)
           const kd = kills / Math.max(1, deaths)
-          if (kd < 0.5) reasons.push(`Son 3 maçta ort. K/D ${kd.toFixed(2)}`)
+          if (kd < 0.5) reasons.push(tr('Son 3 maçta ort. K/D {kd}', { kd: kd.toFixed(2) }))
           if (reasons.length) risky.push({ puuid, reasons })
         } catch {
           /* history may be hidden or unavailable: do not flag */
@@ -95,13 +96,13 @@ export class PregameService {
         const n = names.find((x) => x.Subject === r.puuid)
         // Streamer-mode players hide their identity on purpose: never reveal it.
         const hidden = players.find((x) => x.Subject === r.puuid)?.PlayerIdentity?.Incognito === true
-        if (hidden) r.name = 'Gizli Oyuncu'
+        if (hidden) r.name = tr('Gizli Oyuncu')
         else if (n?.GameName) r.name = `${n.GameName}#${n.TagLine}`
       }
     }
     this.warning = risky.length ? { matchId, players: risky } : null
     this.onDodge(this.warning)
-    if (risky.length) log('Dodge', 'error', `${risky.length} riskli takım arkadaşı bulundu`)
+    if (risky.length) log('Dodge', 'error', tr('{n} riskli takım arkadaşı bulundu', { n: risky.length }))
   }
 
   /** Triggered by the pregame WebSocket event or manually. `manual` bypasses the "already handled" guard. */
@@ -112,9 +113,9 @@ export class PregameService {
       await this.run(manual)
     } catch (e) {
       if (e instanceof HttpError && e.status === 404) {
-        if (manual) log('Instalocker', 'info', 'Şu an ajan seçiminde değilsin')
+        if (manual) log('Instalocker', 'info', tr('Şu an ajan seçiminde değilsin'))
       } else {
-        log('Instalocker', 'error', `Hata: ${(e as Error).message}`)
+        log('Instalocker', 'error', tr('Hata: {msg}', { msg: (e as Error).message }))
       }
     } finally {
       this.running = false
@@ -142,7 +143,7 @@ export class PregameService {
     const me = match.AllyTeam?.Players.find((p) => p.Subject === puuid)
     const locked = me?.CharacterSelectionState === 'locked'
     this.onStage({
-      mapName: map?.name ?? 'Bilinmeyen Harita',
+      mapName: map?.name ?? tr('Bilinmeyen Harita'),
       agentName: locked && me?.CharacterID ? (this.assets.agent(me.CharacterID)?.name ?? null) : null
     })
 
@@ -157,7 +158,7 @@ export class PregameService {
     }
     const agentId = (map && cfg.agentByMap[map.uuid]) || cfg.defaultAgent
     if (!agentId) {
-      log('Instalocker', 'info', `${map?.name ?? 'Bu harita'} için ajan seçili değil`)
+      log('Instalocker', 'info', tr('{map} için ajan seçili değil', { map: map?.name ?? tr('Bu harita') }))
       this.attempts.set(matchId, MAX_ATTEMPTS)
       return
     }
@@ -170,11 +171,11 @@ export class PregameService {
       await sleep(80)
       await this.auth.remote('POST', `${REGION.glz}/pregame/v1/matches/${matchId}/lock/${agentId}`)
       this.attempts.set(matchId, MAX_ATTEMPTS)
-      log('Instalocker', 'success', `${map?.name ?? 'Harita'}: ${agentName} kilitlendi`)
-      this.onStage({ mapName: map?.name ?? 'Bilinmeyen Harita', agentName })
+      log('Instalocker', 'success', tr('{map}: {agent} kilitlendi', { map: map?.name ?? tr('Harita'), agent: agentName }))
+      this.onStage({ mapName: map?.name ?? tr('Bilinmeyen Harita'), agentName })
       this.evaluateComp([...(match.AllyTeam?.Players ?? []).filter((x) => x.Subject !== puuid), { CharacterID: agentId }])
     } catch (e) {
-      log('Instalocker', 'error', `${agentName} kilitlenemedi: ${(e as Error).message}`)
+      log('Instalocker', 'error', tr('{agent} kilitlenemedi: {msg}', { agent: agentName, msg: (e as Error).message }))
     }
   }
 }

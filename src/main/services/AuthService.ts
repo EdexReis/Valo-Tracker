@@ -3,6 +3,7 @@ import path from 'node:path'
 import { readFileSync } from 'node:fs'
 import { CLIENT_PLATFORM } from '../constants'
 import { log } from '../logger'
+import { tr } from '@shared/i18n'
 
 export interface Lockfile {
   name: string
@@ -64,7 +65,7 @@ export class AuthService {
   /** GET against the local Riot Client API (self-signed cert). */
   localGet(urlPath: string): Promise<{ status: number; body: string }> {
     const lock = this.lock ?? this.readLockfile()
-    if (!lock) return Promise.reject(new Error('Lockfile bulunamadı'))
+    if (!lock) return Promise.reject(new Error(tr('Lockfile bulunamadı')))
     return new Promise((resolve, reject) => {
       const req = https.request(
         {
@@ -83,7 +84,7 @@ export class AuthService {
           res.on('end', () => resolve({ status: res.statusCode ?? 0, body }))
         }
       )
-      req.on('timeout', () => req.destroy(new Error('Yerel istek zaman aşımı')))
+      req.on('timeout', () => req.destroy(new Error(tr('Yerel istek zaman aşımı'))))
       req.on('error', reject)
       req.end()
     })
@@ -125,7 +126,7 @@ export class AuthService {
   }
 
   private async headers(): Promise<Record<string, string>> {
-    if (!this.tokens && !(await this.refreshTokens())) throw new Error('Riot Client oturumu yok')
+    if (!this.tokens && !(await this.refreshTokens())) throw new Error(tr('Riot Client oturumu yok'))
     const t = this.tokens!
     return {
       Authorization: `Bearer ${t.accessToken}`,
@@ -147,7 +148,7 @@ export class AuthService {
       const text = await res.text()
       const expired = res.status === 401 || (res.status === 400 && text.includes('BAD_CLAIMS'))
       if (expired && attempt === 0) {
-        log('Auth', 'info', 'Token süresi doldu, yenileniyor…')
+        log('Auth', 'info', tr('Token süresi doldu, yenileniyor…'))
         if (await this.refreshTokens()) continue
       }
       if (!res.ok) throw new HttpError(res.status, text, url)

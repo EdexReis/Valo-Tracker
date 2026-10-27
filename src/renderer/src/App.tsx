@@ -4,15 +4,17 @@ import TitleBar from './components/TitleBar'
 import Sidebar from './components/Sidebar'
 import DodgeBanner from './components/DodgeBanner'
 import Onboarding from './components/Onboarding'
+import { useApp } from './store'
 import CompBanner from './components/CompBanner'
 import SuggestBanner from './components/SuggestBanner'
 
 export default function App(): JSX.Element {
+  const { appSettings } = useApp()
   const [active, setActive] = useState(TABS[0].id)
   const Page = (TABS.find((t) => t.id === active) ?? TABS[0]).component
 
   return (
-    <div className="flex h-full flex-col">
+    <div key={appSettings.language} className="flex h-full flex-col">
       <Onboarding />
       <TitleBar />
       <div className="flex min-h-0 flex-1">

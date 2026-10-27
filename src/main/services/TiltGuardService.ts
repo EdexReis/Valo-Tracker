@@ -2,6 +2,7 @@ import type { SessionRR } from '@shared/types'
 import { log } from '../logger'
 import type { AuthService } from './AuthService'
 import type { MmrService } from './MmrService'
+import { tr } from '@shared/i18n'
 
 const RECHECK_DELAY_MS = 5000
 
@@ -48,7 +49,7 @@ export class TiltGuardService {
       if (!r || (this.baseline !== null && r.puuid === this.puuid)) return
       this.puuid = r.puuid
       this.baseline = this.current = r.value
-      log('TiltGuard', 'info', 'Oturum RR takibi başladı')
+      log('TiltGuard', 'info', tr('Oturum RR takibi başladı'))
       this.onUpdate(this.state)
     } catch {
       /* retried on the next connection */
@@ -72,10 +73,10 @@ export class TiltGuardService {
       if (!r || r.puuid !== this.puuid) return
       this.current = r.value
       const d = this.state.delta
-      log('TiltGuard', d <= -50 ? 'error' : 'info', `Oturum RR: ${d > 0 ? '+' : ''}${d}`)
+      log('TiltGuard', d <= -50 ? 'error' : 'info', tr('Oturum RR: {rr}', { rr: `${d > 0 ? '+' : ''}${d}` }))
       this.onUpdate(this.state)
     } catch (e) {
-      log('TiltGuard', 'error', `RR alınamadı: ${(e as Error).message}`)
+      log('TiltGuard', 'error', tr('RR alınamadı: {msg}', { msg: (e as Error).message }))
     } finally {
       this.checking = false
     }

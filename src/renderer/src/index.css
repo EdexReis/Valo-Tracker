@@ -26,3 +26,11 @@ body {
   background: #2a3b4d;
   border-radius: 4px;
 }
+
+/* In-game light mode: no animations or transitions while a match runs. */
+.light-mode *,
+.light-mode *::before,
+.light-mode *::after {
+  animation: none !important;
+  transition: none !important;
+}

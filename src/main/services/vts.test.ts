@@ -173,7 +173,7 @@ describe('computeVTS round logic', () => {
     const d = tiny([], 'Blue')
     delete d.kills
     const v = computeVTS(d, 'me', 'Initiator')!
-    expect(v.components?.find((c) => c.key === 'kast')?.value).toBe('veri yok')
+    expect(v.components?.find((c) => c.key === 'kast')?.value).toBe('—')
   })
 
   it('returns null for a player who is not in the match', () => {

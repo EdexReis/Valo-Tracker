@@ -1,6 +1,7 @@
 import type { AiTestResult, CoachResult } from '@shared/types'
 import { log } from '../logger'
 import type { CoachData } from './MatchService'
+import { tr } from '@shared/i18n'
 
 const SYSTEM_PROMPT =
   'Sen sert, profesyonel ve disiplinli bir Valorant espor koçusun. Oyuncunun maç istatistiklerini inceleyip ona Türkçe olarak 3 maddeden oluşan, doğrudan hatasını yüzüne vuran ve nasıl gelişmesi gerektiğini söyleyen sert ama yapıcı bir koçluk tavsiyesi ver. Asla kibar olma, profesyonel bir koç gibi konuş.'
@@ -22,14 +23,17 @@ export class LocalAICoachService {
   /** Single-match coaching. Never throws. */
   getAICoaching(matchData: CoachData): Promise<CoachResult> {
     const label = `${matchData.map} · ${matchData.agent} · ${matchData.kills}/${matchData.deaths}/${matchData.assists}`
-    return this.ask(`Maç verilerim (JSON). "economy" alanı buy türlerine göre raund sayısı ve kazanılan raundları verir:\n${JSON.stringify(matchData)}`, label)
+    return this.ask(
+      tr('Maç verilerim (JSON). "economy" alanı buy türlerine göre raund sayısı ve kazanılan raundları verir:\n{json}', { json: JSON.stringify(matchData) }),
+      label
+    )
   }
 
   /** Coaching over the last ~20 ranked/unrated matches. Never throws. */
   getTrendCoaching(trend: Record<string, unknown>): Promise<CoachResult> {
     return this.ask(
-      `Son ${String(trend.matches)} maçımın özeti (JSON). Tekil maçlara değil, tekrar eden alışkanlıklarıma ve trende odaklan:\n${JSON.stringify(trend)}`,
-      `Son ${String(trend.matches)} maç · trend analizi`
+      tr('Son {n} maçımın özeti (JSON). Tekil maçlara değil, tekrar eden alışkanlıklarıma ve trende odaklan:\n{json}', { n: String(trend.matches), json: JSON.stringify(trend) }),
+      tr('Son {n} maç · trend analizi', { n: String(trend.matches) })
     )
   }
 
@@ -42,7 +46,7 @@ export class LocalAICoachService {
       return { ok: true, model }
     } catch (e) {
       const err = e as Error
-      return { ok: false, error: err.name === 'AbortError' ? 'Sunucu yanıt vermedi.' : UNREACHABLE }
+      return { ok: false, error: err.name === 'AbortError' ? tr('Sunucu yanıt vermedi.') : tr(UNREACHABLE) }
     } finally {
       clearTimeout(timer)
     }
@@ -62,23 +66,23 @@ export class LocalAICoachService {
           temperature: 0.7,
           max_tokens: 800,
           messages: [
-            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'system', content: tr(SYSTEM_PROMPT) },
             { role: 'user', content: userContent }
           ]
         })
       })
       if (!res.ok) {
-        return { ok: false, error: `AI sunucusu hata döndürdü (${res.status}). Bir model yüklü mü?` }
+        return { ok: false, error: tr('AI sunucusu hata döndürdü ({status}). Bir model yüklü mü?', { status: res.status }) }
       }
       const json = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> }
       const text = json.choices?.[0]?.message?.content?.trim()
-      if (!text) return { ok: false, error: 'Model boş yanıt döndürdü.' }
+      if (!text) return { ok: false, error: tr('Model boş yanıt döndürdü.') }
       return { ok: true, text, matchLabel }
     } catch (e) {
       const err = e as Error
-      if (err.name === 'AbortError') return { ok: false, error: 'AI Koç yanıt vermedi (zaman aşımı). Model çok yavaş olabilir.' }
-      log('AI Koç', 'error', err.message)
-      return { ok: false, error: UNREACHABLE }
+      if (err.name === 'AbortError') return { ok: false, error: tr('AI Koç yanıt vermedi (zaman aşımı). Model çok yavaş olabilir.') }
+      log(tr('AI Koç'), 'error', err.message)
+      return { ok: false, error: tr(UNREACHABLE) }
     } finally {
       clearTimeout(timer)
     }

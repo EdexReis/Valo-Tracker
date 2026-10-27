@@ -2,6 +2,7 @@ import path from 'node:path'
 import { BrowserWindow, globalShortcut, screen } from 'electron'
 import type { OverlayCorner } from '@shared/types'
 import { log } from './logger'
+import { tr } from '@shared/i18n'
 
 const WIDTH = 340
 const HEIGHT = 560
@@ -82,7 +83,7 @@ export class OverlayWindowManager {
       } catch {
         this.registered = false
       }
-      if (!this.registered) log('Overlay', 'error', `${this.shortcut} kısayolu kaydedilemedi (başka uygulama kullanıyor olabilir)`)
+      if (!this.registered) log('Overlay', 'error', tr('{shortcut} kısayolu kaydedilemedi (başka uygulama kullanıyor olabilir)', { shortcut: this.shortcut }))
     } else {
       this.unregister()
       this.hide()

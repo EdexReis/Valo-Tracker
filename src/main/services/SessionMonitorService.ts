@@ -5,6 +5,7 @@ import type { HistoryStore } from './HistoryStore'
 import type { NotifyService } from './NotifyService'
 import type { SettingsService } from './SettingsService'
 import type { TiltGuardService } from './TiltGuardService'
+import { tr } from '@shared/i18n'
 
 const CHECK_INTERVAL_MS = 10 * 60 * 1000
 
@@ -45,7 +46,11 @@ export class SessionMonitorService {
   }
 
   /** Call after a finished match has been synced into the history. */
+  /** While it returns true (a match is running) no reminder is sent. */
+  gate: (() => boolean) | null = null
+
   async evaluate(): Promise<void> {
+    if (this.gate?.()) return
     const cfg = this.settings.getApp()
     const puuid = this.auth.puuid
     if (!cfg.breakReminders || !puuid) return
@@ -54,24 +59,24 @@ export class SessionMonitorService {
       .matches(puuid)
       .filter((m) => isRankedLike(m) && m.startMillis >= this.startedAt - 30 * 60 * 1000)
     const streak = losingStreak(session)
-    if (streak >= 3) await this.once(`streak:${session[0]?.matchId}`, '🛑 Mola zamanı', `Üst üste ${streak} maç kaybettin. Biraz ara ver, tilt olmadan dön.`)
+    if (streak >= 3) await this.once(`streak:${session[0]?.matchId}`, tr('🛑 Mola zamanı'), tr('Üst üste {n} maç kaybettin. Biraz ara ver, tilt olmadan dön.', { n: streak }))
 
     const delta = this.tilt.state.delta
     if (this.tilt.state.ready && delta <= -50) {
-      await this.once(`rr:${Math.floor(delta / 50)}`, '⚠️ Tilt Guard', `Bu oturumda ${delta} RR kaybettin. Durup bir mola vermeni öneririm.`)
+      await this.once(`rr:${Math.floor(delta / 50)}`, '⚠️ Tilt Guard', tr('Bu oturumda {delta} RR kaybettin. Durup bir mola vermeni öneririm.', { delta }))
     }
 
     const hours = (Date.now() - this.startedAt) / 3_600_000
     if (hours >= cfg.breakAfterHours) {
       const block = Math.floor(hours / cfg.breakAfterHours)
-      await this.once(`time:${block}`, '⏱️ Uzun oturum', `${Math.floor(hours)} saattir oynuyorsun. Su iç, gözlerini dinlendir.`)
+      await this.once(`time:${block}`, tr('⏱️ Uzun oturum'), tr('{h} saattir oynuyorsun. Su iç, gözlerini dinlendir.', { h: Math.floor(hours) }))
     }
   }
 
   private async once(key: string, title: string, body: string): Promise<void> {
     if (this.sent.has(key)) return
     this.sent.add(key)
-    log('Mola', 'info', `${title}: ${body}`)
+    log(tr('Mola'), 'info', `${title}: ${body}`)
     await this.notify.push(title, body)
   }
 }

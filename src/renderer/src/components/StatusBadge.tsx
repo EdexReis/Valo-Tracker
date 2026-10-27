@@ -1,29 +1,30 @@
 import { useApp } from '../store'
+import { tr } from '@shared/i18n'
 
 export default function StatusBadge(): JSX.Element {
   const { status } = useApp()
 
-  let label = 'Valorant Bekleniyor'
+  let label = tr('Valorant Bekleniyor')
   let color = 'bg-val-mute'
   if (status.connection === 'connecting') {
-    label = 'Bağlanılıyor…'
+    label = tr('Bağlanılıyor…')
     color = 'bg-yellow-400'
   } else if (status.connection === 'connected') {
     switch (status.gameState) {
       case 'MENUS':
-        label = 'Lobide'
+        label = tr('Lobide')
         color = 'bg-emerald-400'
         break
       case 'PREGAME':
-        label = 'Ajan Seçiminde'
+        label = tr('Ajan Seçiminde')
         color = 'bg-val-red'
         break
       case 'INGAME':
-        label = 'Maçta'
+        label = tr('Maçta')
         color = 'bg-val-blue'
         break
       default:
-        label = 'Bağlı'
+        label = tr('Bağlı')
         color = 'bg-emerald-400'
     }
   }

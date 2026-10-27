@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Archive } from 'lucide-react'
 import type { StoreDay, StoreSkinDay } from '@shared/types'
+import { locale, tr } from '@shared/i18n'
 
 function Mini({ s, night }: { s: StoreSkinDay; night?: boolean }): JSX.Element {
   const price = s.discountedCost ?? s.cost
@@ -36,21 +37,21 @@ export default function StoreArchivePanel(): JSX.Element {
     <section className="space-y-4 rounded border border-val-line bg-val-panel p-5">
       <div>
         <h2 className="flex items-center gap-2 text-base font-bold">
-          <Archive size={16} className="text-val-red" /> Mağaza Arşivi
+          <Archive size={16} className="text-val-red" /> {tr('Mağaza Arşivi')}
         </h2>
-        <p className="text-sm text-val-mute">Mağazanı her açışında günlük teklifler kaydedilir. Geçmiş günlere bakabilir, bir skinin son ne zaman düştüğünü arayabilirsin. Arşiv kurulumdan itibaren birikir.</p>
+        <p className="text-sm text-val-mute">{tr('Mağazanı her açışında günlük teklifler kaydedilir. Geçmiş günlere bakabilir, bir skinin son ne zaman düştüğünü arayabilirsin. Arşiv kurulumdan itibaren birikir.')}</p>
       </div>
       <input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder="Skin ara (son ne zaman düştü?)…"
+        placeholder={tr('Skin ara (son ne zaman düştü?)…')}
         className="w-full max-w-sm rounded border border-val-line bg-val-bg px-3 py-2 text-sm outline-none focus:border-val-red select-text"
       />
-      {shown.length === 0 && <p className="text-sm text-val-mute">{days.length ? 'Eşleşen gün yok.' : 'Henüz arşivlenmiş gün yok. Mağaza sekmesi açıldıkça dolar.'}</p>}
+      {shown.length === 0 && <p className="text-sm text-val-mute">{days.length ? tr('Eşleşen gün yok.') : tr('Henüz arşivlenmiş gün yok. Mağaza sekmesi açıldıkça dolar.')}</p>}
       <div className="space-y-3">
         {shown.map((d) => (
           <div key={d.date}>
-            <div className="mb-1 text-xs font-bold text-val-mute">{new Date(d.date).toLocaleDateString('tr-TR', { dateStyle: 'long' })}</div>
+            <div className="mb-1 text-xs font-bold text-val-mute">{new Date(d.date).toLocaleDateString(locale(), { dateStyle: 'long' })}</div>
             <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
               {d.daily.map((s) => (
                 <Mini key={s.uuid} s={s} />

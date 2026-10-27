@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import type { MatchSummary } from './types'
-import { bestAgentOnMap, buildWeeklyReport, computeBadges, groupStats, isoWeekKey, losingStreak, projectRank, totals } from './stats'
+import {
+  bestAgentOnMap,
+  buildWeeklyReport,
+  coPlayerStats,
+  computeBadges,
+  groupStats,
+  isoWeekKey,
+  losingStreak,
+  projectRank,
+  totals,
+  weaponStats
+} from './stats'
 
 const NOW = Date.UTC(2026, 9, 27, 12)
 const HOUR = 3_600_000
@@ -118,5 +129,52 @@ describe('badges', () => {
   it('detects a 5-win streak', () => {
     const wins = Array.from({ length: 5 }, (_, i) => match(i, 'win'))
     expect(computeBadges(wins).find((b) => b.key === 'streak')?.unlocked).toBe(true)
+  })
+})
+
+describe('weaponStats', () => {
+  it('adds up kills and deaths per weapon and ignores matches without data', () => {
+    const list = [
+      match(1, 'win', { weaponKills: { vandal: 10, ability: 2 }, weaponDeaths: { vandal: 4 } }),
+      match(2, 'win', { weaponKills: { vandal: 6, phantom: 4 }, weaponDeaths: { phantom: 5 } }),
+      match(3, 'win') // synced before weapon tracking: no data
+    ]
+    const rows = weaponStats(list)
+    expect(rows[0]).toMatchObject({ key: 'vandal', kills: 16, deaths: 4 })
+    expect(rows.find((r) => r.key === 'phantom')).toMatchObject({ kills: 4, deaths: 5 })
+    // 16 of 22 kills, over the 2 matches that have data
+    expect(rows[0].share).toBe(73)
+    expect(rows[0].killsPerMatch).toBe(8)
+  })
+
+  it('returns nothing when no match has weapon data', () => {
+    expect(weaponStats([match(1, 'win')])).toEqual([])
+  })
+})
+
+describe('coPlayerStats', () => {
+  const list = [
+    match(1, 'win', { vts: { score: 700, grade: 'A' } }),
+    match(2, 'loss', { vts: { score: 500, grade: 'B' } }),
+    match(3, 'win', { vts: { score: 600, grade: 'B' } }),
+    match(4, 'draw'),
+    match(5, 'win') // no teammate record for this match
+  ]
+  const mates = { '1': ['duo', 'a'], '2': ['duo'], '3': ['duo', 'b'], '4': ['duo'] }
+
+  it('groups teammates and counts wins, losses and my average VTS', () => {
+    const rows = coPlayerStats(list, mates)
+    expect(rows).toHaveLength(1) // a and b were seen once: below the minimum
+    expect(rows[0]).toMatchObject({ puuid: 'duo', games: 3, wins: 2, losses: 1, winRate: 67, avgVts: 600 })
+  })
+
+  it('ignores draws and matches without a record', () => {
+    expect(coPlayerStats(list, mates, 1).find((r) => r.puuid === 'duo')?.games).toBe(3)
+  })
+
+  it('sorts by games together', () => {
+    const rows = coPlayerStats(list, mates, 1)
+    expect(rows[0].puuid).toBe('duo')
+    expect(rows.map((r) => r.games)).toEqual([3, 1, 1])
   })
 })

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { ShieldAlert, Zap } from 'lucide-react'
 import { useApp } from '../store'
+import { tr } from '@shared/i18n'
 
 export default function InstalockPage(): JSX.Element {
   const { assets, settings, updateSettings, triggerPregame, status, appSettings, updateApp } = useApp()
@@ -17,7 +18,7 @@ export default function InstalockPage(): JSX.Element {
 
   const AgentOptions = (): JSX.Element => (
     <>
-      <option value="">— Seçme —</option>
+      <option value="">{tr('— Seçme —')}</option>
       {assets.agents.map((a) => (
         <option key={a.uuid} value={a.uuid}>
           {a.name}
@@ -31,7 +32,7 @@ export default function InstalockPage(): JSX.Element {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold">Instalocker</h1>
-          <p className="text-sm text-val-mute">Ajan seçimi başladığında seçtiğin ajan otomatik kilitlenir.</p>
+          <p className="text-sm text-val-mute">{tr('Ajan seçimi başladığında seçtiğin ajan otomatik kilitlenir.')}</p>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -39,7 +40,7 @@ export default function InstalockPage(): JSX.Element {
             disabled={status.connection !== 'connected'}
             className="flex items-center gap-2 rounded border border-val-line px-3 py-2 text-sm font-semibold hover:bg-val-raised disabled:opacity-40"
           >
-            <Zap size={15} /> Şimdi Dene
+            <Zap size={15} /> {tr('Şimdi Dene')}
           </button>
           <button
             role="switch"
@@ -52,7 +53,7 @@ export default function InstalockPage(): JSX.Element {
               settings.enabled ? 'bg-val-red text-white' : 'bg-val-raised text-val-mute'
             }`}
           >
-            Instalock {settings.enabled ? 'Aktif' : 'Kapalı'}
+            {settings.enabled ? tr('Instalock Aktif') : tr('Instalock Kapalı')}
           </button>
         </div>
       </div>
@@ -61,8 +62,7 @@ export default function InstalockPage(): JSX.Element {
         <p className="flex items-start gap-2">
           <ShieldAlert size={18} className="mt-0.5 shrink-0 text-orange-400" />
           <span>
-            <span className="font-semibold">Hesap riski:</span> Riot, ajan seçimini otomatikleştiren araçlara (instalock) geçici veya kalıcı ceza verdiğini bildirmiştir. Bu özelliği
-            önermiyoruz; kullanırsan sorumluluk sana aittir.
+            <span className="font-semibold">{tr('Hesap riski:')}</span> {tr('Riot, ajan seçimini otomatikleştiren araçlara (instalock) geçici veya kalıcı ceza verdiğini bildirmiştir. Bu özelliği önermiyoruz; kullanırsan sorumluluk sana aittir.')}
           </span>
         </p>
         {(confirming || (settings.enabled && !appSettings.instalockRiskAck)) && (
@@ -75,10 +75,10 @@ export default function InstalockPage(): JSX.Element {
               }}
               className="rounded bg-val-red px-3 py-1.5 text-xs font-bold hover:opacity-90"
             >
-              Riski anlıyorum, etkinleştir
+              {tr('Riski anlıyorum, etkinleştir')}
             </button>
             <button onClick={() => setConfirming(false)} className="rounded border border-val-line px-3 py-1.5 text-xs font-semibold hover:bg-val-raised">
-              Vazgeç
+              {tr('Vazgeç')}
             </button>
           </div>
         )}
@@ -86,14 +86,14 @@ export default function InstalockPage(): JSX.Element {
 
       <div className="rounded border border-val-line bg-val-panel p-4">
         <label className="mb-1 block text-xs font-bold uppercase tracking-widest text-val-mute">
-          Varsayılan ajan (seçim yapılmamış haritalar için)
+          {tr('Varsayılan ajan (seçim yapılmamış haritalar için)')}
         </label>
         <select className={select} value={settings.defaultAgent ?? ''} onChange={(e) => updateSettings({ defaultAgent: e.target.value || null })}>
           <AgentOptions />
         </select>
       </div>
 
-      {assets.maps.length === 0 && <p className="text-sm text-val-mute">Haritalar yükleniyor…</p>}
+      {assets.maps.length === 0 && <p className="text-sm text-val-mute">{tr('Haritalar yükleniyor…')}</p>}
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-3">
         {assets.maps.map((m) => {
           const agent = assets.agents.find((a) => a.uuid === settings.agentByMap[m.uuid])

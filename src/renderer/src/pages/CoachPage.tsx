@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Bot, Loader2, ServerOff, TrendingUp } from 'lucide-react'
 import type { CoachMode, CoachResult } from '@shared/types'
 import { useApp } from '../store'
+import { tr } from '@shared/i18n'
 
 const CHARS_PER_TICK = 2
 const TICK_MS = 16
@@ -23,7 +24,7 @@ export default function CoachPage(): JSX.Element {
     try {
       setManual(await window.api.getAICoaching(mode))
     } catch {
-      setManual({ ok: false, error: 'Analiz başlatılamadı.' })
+      setManual({ ok: false, error: tr('Analiz başlatılamadı.') })
     } finally {
       setLoading(null)
     }
@@ -49,30 +50,30 @@ export default function CoachPage(): JSX.Element {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-xl font-bold">AI Koç</h1>
-        <p className="text-sm text-val-mute">Maç verilerin yerel yapay zekaya (LM Studio) gönderilir; veriler bilgisayarından çıkmaz.</p>
+        <h1 className="text-xl font-bold">{tr('AI Koç')}</h1>
+        <p className="text-sm text-val-mute">{tr('Maç verilerin yerel yapay zekaya (LM Studio) gönderilir; veriler bilgisayarından çıkmaz.')}</p>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
         <button onClick={() => void analyze('last')} disabled={loading !== null || !connected} className={`${btn} bg-val-red hover:opacity-90`}>
           {loading === 'last' ? <Loader2 size={16} className="animate-spin" /> : <Bot size={16} />}
-          Son Maçımı Yapay Zekaya Analiz Ettir
+          {tr('Son Maçımı Yapay Zekaya Analiz Ettir')}
         </button>
         <button onClick={() => void analyze('trend')} disabled={loading !== null} className={`${btn} border border-val-line hover:bg-val-raised`}>
           {loading === 'trend' ? <Loader2 size={16} className="animate-spin" /> : <TrendingUp size={16} />}
-          Son 20 Maçımın Trendini Analiz Et
+          {tr('Son 20 Maçımın Trendini Analiz Et')}
         </button>
         <label className="ml-auto flex cursor-pointer items-center gap-2 text-sm text-val-mute">
           <input type="checkbox" checked={appSettings.autoCoach} onChange={(e) => updateApp({ autoCoach: e.target.checked })} />
-          Maç bitince otomatik analiz et
+          {tr('Maç bitince otomatik analiz et')}
         </label>
       </div>
 
-      {!connected && <p className="text-sm text-val-mute">Son maç analizi için Valorant bekleniyor. Trend analizi kayıtlı geçmişle çalışır.</p>}
+      {!connected && <p className="text-sm text-val-mute">{tr('Son maç analizi için Valorant bekleniyor. Trend analizi kayıtlı geçmişle çalışır.')}</p>}
 
       {loading && (
         <div className="flex items-center gap-3 rounded border border-val-line bg-val-panel p-5 text-sm text-val-mute">
-          <Loader2 size={16} className="animate-spin" /> Koç inceliyor… (yerel modele göre dakikalar sürebilir)
+          <Loader2 size={16} className="animate-spin" /> {tr('Koç inceliyor… (yerel modele göre dakikalar sürebilir)')}
         </div>
       )}
 
@@ -84,9 +85,9 @@ export default function CoachPage(): JSX.Element {
       )}
 
       {!loading && result?.ok && (
-        <article className="rounded border border-val-line bg-val-panel p-5" onClick={() => setShown(text.length)} title="Tamamını göstermek için tıkla">
+        <article className="rounded border border-val-line bg-val-panel p-5" onClick={() => setShown(text.length)} title={tr('Tamamını göstermek için tıkla')}>
           <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-val-red">
-            <Bot size={14} /> Koçun yorumu · <span className="text-val-mute">{result.matchLabel}</span>
+            <Bot size={14} /> {tr('Koçun yorumu')} · <span className="text-val-mute">{result.matchLabel}</span>
           </div>
           <p className="select-text whitespace-pre-wrap text-sm leading-relaxed">
             {text.slice(0, shown)}

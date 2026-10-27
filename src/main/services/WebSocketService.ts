@@ -4,6 +4,7 @@ import type { Connection, GameState } from '@shared/types'
 import { POLL_LOCKFILE_MS } from '../constants'
 import { log } from '../logger'
 import type { AuthService } from './AuthService'
+import { tr } from '@shared/i18n'
 
 interface Events {
   connection: [Connection]
@@ -86,7 +87,7 @@ export class WebSocketService extends EventEmitter {
     ws.on('open', () => {
       ws.send(JSON.stringify([5, 'OnJsonApiEvent']))
       this.setConnection('connected')
-      log('WebSocket', 'success', 'Riot Client\'a bağlanıldı')
+      log('WebSocket', 'success', tr('Riot Client\'a bağlanıldı'))
       void this.fetchInitialState()
     })
 
@@ -99,7 +100,7 @@ export class WebSocketService extends EventEmitter {
       this.lastState = 'UNKNOWN'
       this.setGameState('UNKNOWN')
       this.setConnection('waiting')
-      log('WebSocket', 'info', 'Bağlantı kapandı, oyun bekleniyor…')
+      log('WebSocket', 'info', tr('Bağlantı kapandı, oyun bekleniyor…'))
     }
     ws.on('close', teardown)
     ws.on('error', () => {

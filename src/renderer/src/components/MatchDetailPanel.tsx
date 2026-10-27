@@ -2,17 +2,22 @@ import { useEffect, useState } from 'react'
 import { Loader2, Skull } from 'lucide-react'
 import type { MatchDetail, RoundInfo } from '@shared/types'
 import Heatmap from './Heatmap'
+import { tr } from '@shared/i18n'
 
 const TYPE_LABEL = { pistol: 'Pistol', eco: 'Eco', force: 'Force', full: 'Full buy' } as const
 const TYPE_SHORT = { pistol: 'P', eco: 'E', force: 'F', full: 'B' } as const
 
 function RoundChip({ r }: { r: RoundInfo }): JSX.Element {
   const tip = [
-    `Raund ${r.round}: ${r.won ? 'kazandın' : 'kaybettin'}`,
-    r.kills ? `${r.kills} kill` : null,
-    r.deathSec !== null ? `${r.deathSec}. saniyede öldün${r.killerAgent ? ` (${r.killerAgent})` : ''}` : 'hayatta kaldın',
-    r.econ ? `${TYPE_LABEL[r.econ.type]}: ${r.econ.value} (takım ort. ${r.econ.teamAvg})` : null,
-    r.flag === 'underbuy' ? 'Takım full alırken sen az aldın' : r.flag === 'overbuy' ? 'Takım eco iken sen full aldın' : null
+    tr(r.won ? 'Raund {n}: kazandın' : 'Raund {n}: kaybettin', { n: r.round }),
+    r.kills ? tr('{n} kill', { n: r.kills }) : null,
+    r.deathSec !== null
+      ? r.killerAgent
+        ? tr('{s}. saniyede öldün ({agent})', { s: r.deathSec, agent: r.killerAgent })
+        : tr('{s}. saniyede öldün', { s: r.deathSec })
+      : tr('hayatta kaldın'),
+    r.econ ? tr('{type}: {value} (takım ort. {avg})', { type: TYPE_LABEL[r.econ.type], value: r.econ.value, avg: r.econ.teamAvg }) : null,
+    r.flag === 'underbuy' ? tr('Takım full alırken sen az aldın') : r.flag === 'overbuy' ? tr('Takım eco iken sen full aldın') : null
   ]
     .filter(Boolean)
     .join('\n')
@@ -48,11 +53,11 @@ export default function MatchDetailPanel({ matchId }: { matchId: string }): JSX.
     }
   }, [matchId])
 
-  if (error) return <p className="rounded border border-val-line p-4 text-sm text-val-red">Maç detayı alınamadı (Riot bu maçı artık vermiyor olabilir).</p>
+  if (error) return <p className="rounded border border-val-line p-4 text-sm text-val-red">{tr('Maç detayı alınamadı (Riot bu maçı artık vermiyor olabilir).')}</p>
   if (!detail) {
     return (
       <p className="flex items-center gap-2 rounded border border-val-line p-4 text-sm text-val-mute">
-        <Loader2 size={15} className="animate-spin" /> Detay yükleniyor…
+        <Loader2 size={15} className="animate-spin" /> {tr('Detay yükleniyor…')}
       </p>
     )
   }
@@ -64,24 +69,24 @@ export default function MatchDetailPanel({ matchId }: { matchId: string }): JSX.
     <div className="grid gap-5 rounded-b border border-t-0 border-val-line bg-val-bg/60 p-4 lg:grid-cols-[1fr_280px]">
       <div className="space-y-4">
         <div>
-          <h3 className="mb-2 text-xs font-bold uppercase tracking-widest text-val-mute">Raund akışı</h3>
+          <h3 className="mb-2 text-xs font-bold uppercase tracking-widest text-val-mute">{tr('Raund akışı')}</h3>
           <div className="flex flex-wrap gap-1.5">
             {detail.rounds.map((r) => (
               <RoundChip key={r.round} r={r} />
             ))}
           </div>
-          <p className="mt-2 text-[11px] text-val-mute">K = kill, kafatası = öldün, P/E/F/B = pistol / eco / force / full buy, turuncu halka = buy uyumsuzluğu.</p>
+          <p className="mt-2 text-[11px] text-val-mute">{tr('K = kill, kafatası = öldün, P/E/F/B = pistol / eco / force / full buy, turuncu halka = buy uyumsuzluğu.')}</p>
         </div>
 
         {e && (
           <div>
-            <h3 className="mb-2 text-xs font-bold uppercase tracking-widest text-val-mute">Ekonomi</h3>
+            <h3 className="mb-2 text-xs font-bold uppercase tracking-widest text-val-mute">{tr('Ekonomi')}</h3>
             <table className="w-full max-w-md text-sm tabular-nums">
               <thead>
                 <tr className="text-left text-[11px] uppercase tracking-widest text-val-mute">
-                  <th className="pb-1">Buy</th>
-                  <th>Raund</th>
-                  <th>Kazanma</th>
+                  <th className="pb-1">{tr('Buy')}</th>
+                  <th>{tr('Raund')}</th>
+                  <th>{tr('Kazanma')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -96,8 +101,8 @@ export default function MatchDetailPanel({ matchId }: { matchId: string }): JSX.
             </table>
             {(e.underbuys > 0 || e.overbuys > 0) && (
               <p className="mt-2 text-xs text-orange-300">
-                {e.underbuys > 0 && `${e.underbuys} raundda takım full alırken sen az aldın. `}
-                {e.overbuys > 0 && `${e.overbuys} raundda takım eco iken sen full aldın.`}
+                {e.underbuys > 0 && `${tr('{n} raundda takım full alırken sen az aldın.', { n: e.underbuys })} `}
+                {e.overbuys > 0 && tr('{n} raundda takım eco iken sen full aldın.', { n: e.overbuys })}
               </p>
             )}
           </div>

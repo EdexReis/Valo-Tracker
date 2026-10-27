@@ -2,6 +2,7 @@ import path from 'node:path'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { app } from 'electron'
 import type { MatchSummary, RRPoint } from '@shared/types'
+import { tr } from '@shared/i18n'
 
 interface PerAccount {
   matches: MatchSummary[]
@@ -14,6 +15,8 @@ interface FileShape {
   last: string | null
   /** ISO week of the last weekly report */
   reportWeek?: string
+  /** account puuid -> matchId -> teammate puuids (streamer-mode players are never recorded) */
+  mates?: Record<string, Record<string, string[]>>
 }
 
 const MAX_MATCHES = 2000
@@ -22,12 +25,12 @@ const MAX_RR = 3000
 /** Persists the player's matches and rank samples locally, one bucket per Riot account. */
 export class HistoryStore {
   private file = path.join(app.getPath('userData'), 'history.json')
-  private data: FileShape = { accounts: {}, last: null }
+  private data: FileShape = { accounts: {}, last: null, mates: {} }
 
   constructor() {
     try {
       const parsed = JSON.parse(readFileSync(this.file, 'utf8')) as Partial<FileShape>
-      this.data = { accounts: parsed.accounts ?? {}, last: parsed.last ?? null }
+      this.data = { accounts: parsed.accounts ?? {}, last: parsed.last ?? null, reportWeek: parsed.reportWeek, mates: parsed.mates ?? {} }
     } catch {
       /* first run */
     }
@@ -117,6 +120,21 @@ export class HistoryStore {
     return added
   }
 
+  /** Remembers who was on my team in a match. The caller passes only players who are not hiding their identity. */
+  recordMates(account: string, matchId: string, puuids: string[]): void {
+    const byMatch = ((this.data.mates ??= {})[account] ??= {})
+    const next = [...new Set(puuids)]
+    if (JSON.stringify(byMatch[matchId]) === JSON.stringify(next)) return
+    byMatch[matchId] = next
+    const ids = Object.keys(byMatch)
+    if (ids.length > 3000) for (const id of ids.slice(0, ids.length - 3000)) delete byMatch[id]
+    this.save()
+  }
+
+  matesByMatch(account: string): Record<string, string[]> {
+    return this.data.mates?.[account] ?? {}
+  }
+
   rr(puuid: string): RRPoint[] {
     return this.bucket(puuid).rr
   }
@@ -132,7 +150,7 @@ export class HistoryStore {
   }
 
   toCsv(puuid: string): string {
-    const head = ['Tarih', 'Harita', 'Mod', 'Ajan', 'Sonuc', 'Skor', 'K', 'D', 'A', 'ACS', 'ADR', 'HS%', 'FirstBlood', 'FirstDeath', 'VTS']
+    const head = [tr('Tarih'), tr('Harita'), tr('Mod'), tr('Ajan'), tr('Sonuc'), tr('Skor'), 'K', 'D', 'A', 'ACS', 'ADR', 'HS%', 'FirstBlood', 'FirstDeath', 'VTS']
     const rows = this.matches(puuid).map((m) =>
       [
         new Date(m.startMillis).toISOString(),

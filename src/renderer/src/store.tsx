@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { setLanguage } from '@shared/i18n'
 import type { AppSettings, CoachEvent, PregameStage, CompWarning, DodgeWarning, SessionRR, AppStatus, AssetsPayload, InstalockSettings, LogEntry, MatchSnapshot } from '@shared/types'
 
 interface AppState {
@@ -31,7 +32,7 @@ export function useApp(): AppState {
 
 export function AppProvider({ children }: { children: ReactNode }): JSX.Element {
   const [status, setStatus] = useState<AppStatus>({ connection: 'waiting', gameState: 'UNKNOWN', puuid: null })
-  const [assets, setAssets] = useState<AssetsPayload>({ agents: [], maps: [] })
+  const [assets, setAssets] = useState<AssetsPayload>({ agents: [], maps: [], weapons: [] })
   const [settings, setSettings] = useState<InstalockSettings>({ enabled: false, defaultAgent: null, agentByMap: {} })
   const [match, setMatch] = useState<MatchSnapshot | null>(null)
   const [sessionRR, setSessionRR] = useState<SessionRR>({ ready: false, delta: 0, initialRR: 0, currentRR: 0 })
@@ -61,9 +62,17 @@ export function AppProvider({ children }: { children: ReactNode }): JSX.Element 
     overlayCorner: 'tr',
     overlayOpacity: 1,
     aiUrl: 'http://127.0.0.1:1234/v1',
-    aiModel: ''
+    aiModel: '',
+    discordMatchSummary: true,
+    language: 'tr',
+    lightMode: true
   })
   const [appLoaded, setAppLoaded] = useState(false)
+  // Set during render so every child already renders in the right language (App remounts on change).
+  setLanguage(appSettings.language)
+  useEffect(() => {
+    document.documentElement.lang = appSettings.language // keeps CSS uppercase correct (Turkish dotted İ)
+  }, [appSettings.language])
   const [lastCoach, setLastCoach] = useState<CoachEvent | null>(null)
   const [stage, setStage] = useState<PregameStage | null>(null)
   const [logs, setLogs] = useState<LogEntry[]>([])
@@ -98,6 +107,7 @@ export function AppProvider({ children }: { children: ReactNode }): JSX.Element 
       api.onSessionRR(setSessionRR),
       api.onDodgeWarning(setDodge),
       api.onCompWarning(setComp),
+      api.onLightMode((on) => document.documentElement.classList.toggle('light-mode', on)),
       api.onCoach(setLastCoach),
       api.onStage(setStage),
       api.onLog((e) => setLogs((l) => [...l.slice(-199), e]))

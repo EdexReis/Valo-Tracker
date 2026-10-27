@@ -6,6 +6,7 @@ import { log } from '../logger'
 import type { AssetCacheService } from './AssetCacheService'
 import type { NotifyService } from './NotifyService'
 import type { StorefrontService } from './StorefrontService'
+import { tr } from '@shared/i18n'
 
 interface Stored {
   wishlist: string[]
@@ -108,9 +109,9 @@ export class WishlistService {
       this.data.notified.push(key)
       changed = true
       const price = h.discountedCost ?? h.cost
-      const where = h.where === 'night' ? 'Gece Pazarı' : 'günlük mağaza'
-      log('Wishlist', 'success', `${h.name} ${where}nda!`)
-      await this.notify.push('🎁 Wishlist skin mağazada!', `${h.name} — ${where}${price ? ` (${price} VP)` : ''}`)
+      const where = h.where === 'night' ? tr('Gece Pazarı') : tr('günlük mağaza')
+      log('Wishlist', 'success', tr('{name} mağazada ({where})!', { name: h.name, where }))
+      await this.notify.push(tr('🎁 Wishlist skin mağazada!'), `${tr('{name} — {where}', { name: h.name, where })}${price ? ` (${price} VP)` : ''}`)
     }
     if (changed) {
       this.data.notified = this.data.notified.slice(-200)

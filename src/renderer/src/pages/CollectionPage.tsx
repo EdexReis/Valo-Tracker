@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Loader2, RefreshCw } from 'lucide-react'
 import type { CollectionData } from '@shared/types'
 import { useApp } from '../store'
+import { locale, tr } from '@shared/i18n'
 
 export default function CollectionPage(): JSX.Element {
   const { status } = useApp()
@@ -17,7 +18,7 @@ export default function CollectionPage(): JSX.Element {
     try {
       setData(await window.api.getCollection())
     } catch {
-      setError('Koleksiyon alınamadı. Valorant açık ve giriş yapılmış olmalı.')
+      setError(tr('Koleksiyon alınamadı. Valorant açık ve giriş yapılmış olmalı.'))
     } finally {
       setLoading(false)
     }
@@ -36,9 +37,9 @@ export default function CollectionPage(): JSX.Element {
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold">Koleksiyon</h1>
+          <h1 className="text-xl font-bold">{tr('Koleksiyon')}</h1>
           <p className="text-sm text-val-mute">
-            {data ? `${data.count} skin · tahmini değer ${data.totalVP.toLocaleString('tr-TR')} VP (sadece mağaza fiyatı bilinenler)` : 'Sahip olduğun skinler'}
+            {data ? tr('{count} skin · tahmini değer {vp} VP (sadece mağaza fiyatı bilinenler)', { count: data.count, vp: data.totalVP.toLocaleString(locale()) }) : tr('Sahip olduğun skinler')}
           </p>
         </div>
         <button
@@ -47,19 +48,19 @@ export default function CollectionPage(): JSX.Element {
           className="flex items-center gap-2 rounded bg-val-red px-4 py-2 text-sm font-bold hover:opacity-90 disabled:opacity-40"
         >
           {loading ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
-          Yenile
+          {tr('Yenile')}
         </button>
       </div>
 
       {error && <p className="text-sm text-val-red">{error}</p>}
-      {!connected && <p className="text-sm text-val-mute">Valorant bekleniyor…</p>}
+      {!connected && <p className="text-sm text-val-mute">{tr('Valorant bekleniyor…')}</p>}
 
       {data && (
         <>
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Skin ara…"
+            placeholder={tr('Skin ara…')}
             className="w-full max-w-sm rounded border border-val-line bg-val-bg px-3 py-2 text-sm outline-none focus:border-val-red select-text"
           />
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">

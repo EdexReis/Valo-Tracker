@@ -1,5 +1,6 @@
 import { TriangleAlert } from 'lucide-react'
 import { useApp } from '../store'
+import { tr } from '@shared/i18n'
 
 export default function CompBanner(): JSX.Element | null {
   const { comp, status } = useApp()
@@ -12,7 +13,7 @@ export default function CompBanner(): JSX.Element | null {
         <div className="space-y-1">
           {comp.messages.map((m) => (
             <p key={m} className="text-sm font-semibold">
-              ⚠️ Taktiksel Uyarı: {m}
+              {tr('⚠️ Taktiksel Uyarı: {message}', { message: m })}
             </p>
           ))}
         </div>

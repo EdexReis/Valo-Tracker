@@ -1,7 +1,9 @@
 import path from 'node:path'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { app, safeStorage } from 'electron'
-import type { AppSettings, InstalockSettings, TelegramInput, TelegramSettingsView } from '@shared/types'
+import type { AppSettings, DiscordWebhookView, InstalockSettings, TelegramInput, TelegramSettingsView } from '@shared/types'
+import { isDiscordWebhookUrl } from '@shared/webhook'
+import { tr } from '@shared/i18n'
 
 const DEFAULTS: InstalockSettings = { enabled: false, defaultAgent: null, agentByMap: {} }
 
@@ -29,7 +31,10 @@ export const APP_DEFAULTS: AppSettings = {
   overlayCorner: 'tr',
   overlayOpacity: 1,
   aiUrl: 'http://127.0.0.1:1234/v1',
-  aiModel: ''
+  aiModel: '',
+  discordMatchSummary: true,
+  language: 'tr',
+  lightMode: true
 }
 
 interface TelegramStored {
@@ -60,13 +65,19 @@ export class SettingsService {
   private file = path.join(this.dir, 'settings.json')
   private appFile = path.join(this.dir, 'app-settings.json')
   private telegramFile = path.join(this.dir, 'telegram.json')
+  private webhookFile = path.join(this.dir, 'discord-webhook.json')
+  private discordWebhook = ''
   private settings: InstalockSettings
   private appSettings: AppSettings
   private telegram: { botToken: string; chatId: string } = { botToken: '', chatId: '' }
 
   constructor() {
     this.settings = { ...DEFAULTS, ...readJson<InstalockSettings>(this.file) }
-    this.appSettings = { ...APP_DEFAULTS, ...readJson<AppSettings>(this.appFile) }
+    // First run: pick the language from the OS locale. Existing users (a settings file without a language) stay on Turkish.
+    const saved = readJson<AppSettings>(this.appFile)
+    const firstRunLanguage = app.getLocale().toLowerCase().startsWith('tr') ? 'tr' : 'en'
+    this.appSettings = { ...APP_DEFAULTS, language: saved ? 'tr' : firstRunLanguage, ...saved }
+    this.loadWebhook()
     try {
       const t = readJson<TelegramStored>(this.telegramFile)
       if (t) {
@@ -76,6 +87,36 @@ export class SettingsService {
     } catch {
       /* the encrypted blob cannot be read */
     }
+  }
+
+  /** The webhook address is a secret (anyone holding it can post to the channel): stored encrypted like the Telegram token. */
+  private loadWebhook(): void {
+    try {
+      const w = readJson<{ url: string; encrypted: boolean }>(this.webhookFile)
+      if (w) this.discordWebhook = w.encrypted ? safeStorage.decryptString(Buffer.from(w.url, 'base64')) : w.url
+    } catch {
+      /* the encrypted blob cannot be read */
+    }
+  }
+
+  /** Full address. Main process only. */
+  getDiscordWebhook(): string {
+    return this.discordWebhook
+  }
+
+  getDiscordWebhookView(): DiscordWebhookView {
+    const u = this.discordWebhook
+    return { configured: !!u, hint: u ? `…${u.slice(-6)}` : '' }
+  }
+
+  /** An empty string removes the webhook. Anything that is not a Discord webhook address is rejected. */
+  saveDiscordWebhook(url: string): DiscordWebhookView {
+    const clean = url.trim()
+    if (clean && !isDiscordWebhookUrl(clean)) throw new Error(tr('Geçerli bir Discord webhook adresi değil.'))
+    this.discordWebhook = clean
+    const encrypted = safeStorage.isEncryptionAvailable()
+    writeJson(this.webhookFile, { url: encrypted ? safeStorage.encryptString(clean).toString('base64') : clean, encrypted })
+    return this.getDiscordWebhookView()
   }
 
   get(): InstalockSettings {

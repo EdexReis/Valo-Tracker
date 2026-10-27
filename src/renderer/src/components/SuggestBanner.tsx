@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Lightbulb } from 'lucide-react'
 import { bestAgentOnMap, type GroupStat } from '@shared/stats'
 import { useApp } from '../store'
+import { tr } from '@shared/i18n'
 
 /** During agent select: suggests the agent with the best win rate on this map from the player's own history. */
 export default function SuggestBanner(): JSX.Element | null {
@@ -28,8 +29,7 @@ export default function SuggestBanner(): JSX.Element | null {
       <Lightbulb className="shrink-0 text-emerald-400" size={20} />
       {best.icon && <img src={best.icon} alt="" className="h-8 w-8 rounded bg-val-raised" />}
       <p>
-        <span className="font-semibold">{map}</span> haritasında en iyi ajanın <span className="font-bold">{best.key}</span> (%{best.winRate} galibiyet,{' '}
-        {best.games} maç).
+        {tr('{map} haritasında en iyi ajanın {agent} (%{rate} galibiyet, {n} maç).', { map, agent: best.key, rate: best.winRate, n: best.games })}
       </p>
     </div>
   )

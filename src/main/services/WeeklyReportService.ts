@@ -4,6 +4,7 @@ import type { AuthService } from './AuthService'
 import type { HistoryStore } from './HistoryStore'
 import type { NotifyService } from './NotifyService'
 import type { SettingsService } from './SettingsService'
+import { tr } from '@shared/i18n'
 
 const CHECK_INTERVAL_MS = 30 * 60 * 1000
 const SEND_AFTER_HOUR = 20 // Sunday 20:00 local time
@@ -21,7 +22,7 @@ export class WeeklyReportService {
   /** Report text for the stored history; with send=true it is also pushed to notifications. */
   async report(send: boolean): Promise<string> {
     const id = this.auth.puuid ?? this.history.lastPuuid
-    const text = id ? buildWeeklyReport(this.history.matches(id)) : 'Rapor için kayıtlı maç yok.'
+    const text = id ? buildWeeklyReport(this.history.matches(id)) : tr('Rapor için kayıtlı maç yok.')
     if (send) await this.notify.push('Valo Tracker', text)
     return text
   }
@@ -35,14 +36,18 @@ export class WeeklyReportService {
     this.timer = null
   }
 
+  /** While it returns true (a match is running) the report waits for the next check. */
+  gate: (() => boolean) | null = null
+
   private async tick(): Promise<void> {
+    if (this.gate?.()) return
     if (!this.settings.getApp().weeklyReport) return
     const now = new Date()
     if (now.getDay() !== 0 || now.getHours() < SEND_AFTER_HOUR) return
     const week = isoWeekKey(now)
     if (this.history.reportWeek === week) return
     this.history.setReportWeek(week)
-    log('Rapor', 'info', 'Haftalık rapor gönderiliyor')
+    log(tr('Rapor'), 'info', tr('Haftalık rapor gönderiliyor'))
     await this.report(true)
   }
 }

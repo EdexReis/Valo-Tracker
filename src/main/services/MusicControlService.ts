@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process'
 import { log } from '../logger'
+import { tr } from '@shared/i18n'
 
 /**
  * Pauses and resumes whatever the Windows media session reports as playing (Spotify, YouTube Music,
@@ -63,7 +64,7 @@ export class MusicControlService {
       const out = await runPowerShell(PAUSE_SCRIPT)
       const ids = out.replace(/^PAUSED:/, '').split('|').filter(Boolean)
       this.paused = ids
-      if (ids.length) log('Müzik', 'info', 'Müzik duraklatıldı')
+      if (ids.length) log(tr('Müzik'), 'info', tr('Müzik duraklatıldı'))
     })
   }
 
@@ -74,7 +75,7 @@ export class MusicControlService {
       this.paused = []
       if (!ids.length) return
       await runPowerShell(resumeScript(ids))
-      log('Müzik', 'info', 'Müzik devam ettirildi')
+      log(tr('Müzik'), 'info', tr('Müzik devam ettirildi'))
     })
   }
 
@@ -82,7 +83,7 @@ export class MusicControlService {
     this.busy = this.busy.then(job).catch((e: Error) => {
       if (!this.errorLogged) {
         this.errorLogged = true
-        log('Müzik', 'error', `Medya kontrolü çalışmadı: ${e.message.split('\n')[0]}`)
+        log(tr('Müzik'), 'error', tr('Medya kontrolü çalışmadı: {msg}', { msg: e.message.split('\n')[0] }))
       }
     })
     return this.busy

@@ -3,7 +3,7 @@ import type { VtsComponent, VtsGrade, VtsResult } from '@shared/types'
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 /** Bump when the formula changes: stored matches with an older version are recalculated. */
-export const VTS_VERSION = 3
+export const VTS_VERSION = 5
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v))
 const pts = (v: number): number => Math.round(clamp(v, 0, 100))
@@ -137,26 +137,22 @@ export function computeVTS(d: any, puuid: string, role: string): VtsResult | nul
   const other = teams.find((t) => t.teamId !== myTeam)
   const share = mine && other && mine.roundsWon + other.roundsWon > 0 ? mine.roundsWon / (mine.roundsWon + other.roundsWon) : 0.5
 
+  // Labels are stored as canonical keys and translated when displayed; values are plain numbers.
+  // Labels are stored as canonical keys and translated when displayed; values are plain numbers.
   const components: VtsComponent[] = [
-    { key: 'acs', label: 'Çatışma skoru (ACS)', value: `${Math.round(acs)} (beklenen ${expectedAcs})`, points: pts(50 + (acs / expectedAcs - 1) * 100), weight: 0.25 },
+    { key: 'acs', label: 'Çatışma skoru (ACS / beklenen)', value: `${Math.round(acs)} / ${expectedAcs}`, points: pts(50 + (acs / expectedAcs - 1) * 100), weight: 0.25 },
     { key: 'kd', label: 'K/D', value: kd.toFixed(2), points: pts(50 + (kd - 1) * 100), weight: 0.15 },
     { key: 'adr', label: 'Raund hasarı (ADR)', value: String(Math.round(adr)), points: pts(50 + ((adr - 140) / 70) * 50), weight: 0.15 },
-    { key: 'kast', label: 'KAST', value: detailed ? `%${Math.round(kast)}` : 'veri yok', points: pts(50 + ((kast - 70) / 15) * 50), weight: 0.15 },
+    { key: 'kast', label: 'KAST', value: detailed ? `%${Math.round(kast)}` : '—', points: pts(50 + ((kast - 70) / 15) * 50), weight: 0.15 },
     {
       key: 'opening',
-      label: 'Açılış düelloları',
-      value: `${duels.firstBloods} ilk kan / ${duels.firstDeaths} ilk ölüm`,
+      label: 'Açılış düelloları (ilk kan / ilk ölüm)',
+      value: `${duels.firstBloods} / ${duels.firstDeaths}`,
       points: pts(50 + (openingNet / 0.08) * 50),
       weight: 0.1
     },
-    {
-      key: 'impact',
-      label: 'Multikill ve clutch',
-      value: `${k3 + k4 + k5} multikill, ${clutches} clutch`,
-      points: pts(50 + ((impact - 0.08) / 0.12) * 50),
-      weight: 0.1
-    },
-    { key: 'assist', label: 'Destek (asist)', value: `${st.assists} asist`, points: pts(50 + ((assistsPerRound - 0.2) / 0.2) * 50), weight: 0.05 },
+    { key: 'impact', label: 'Multikill / clutch', value: `${k3 + k4 + k5} / ${clutches}`, points: pts(50 + ((impact - 0.08) / 0.12) * 50), weight: 0.1 },
+    { key: 'assist', label: 'Destek (asist)', value: String(st.assists), points: pts(50 + ((assistsPerRound - 0.2) / 0.2) * 50), weight: 0.05 },
     { key: 'win', label: 'Raund galibiyeti', value: `%${Math.round(share * 100)}`, points: pts(50 + (share - 0.5) * 200), weight: 0.05 }
   ]
 

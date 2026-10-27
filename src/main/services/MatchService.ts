@@ -5,6 +5,8 @@ import type { AuthService } from './AuthService'
 import type { AssetCacheService } from './AssetCacheService'
 import type { HistoryStore } from './HistoryStore'
 import { computeVTS, openingDuels, VTS_VERSION } from './vts'
+import { weaponTally } from './weapons'
+import { tr } from '@shared/i18n'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const QUEUES: Record<string, string> = {
@@ -78,7 +80,7 @@ export class MatchService {
   async getMatchDetails(matchId: string, puuid: string, queueId = ''): Promise<MatchSummary> {
     const d = await this.rawDetails(matchId)
     const me = (d.players ?? []).find((p: any) => p.subject === puuid)
-    if (!me) throw new Error('Oyuncu maç verisinde yok')
+    if (!me) throw new Error(tr('Oyuncu maç verisinde yok'))
     const teams: any[] = d.teams ?? []
     const myTeam = teams.find((t) => t.teamId === me.teamId)
     const other = teams.find((t) => t.teamId !== me.teamId)
@@ -99,6 +101,7 @@ export class MatchService {
       }
     }
     const duels = openingDuels(d, puuid)
+    const weapons = weaponTally(d, puuid)
 
     // Where I died / got kills, as minimap fractions (for the heatmaps).
     const mapUrl: string = d.matchInfo?.mapId ?? ''
@@ -121,7 +124,7 @@ export class MatchService {
       startMillis: d.matchInfo?.gameStartMillis ?? 0,
       queue: QUEUES[queue] ?? queue,
       queueId: queue,
-      mapName: this.assets.mapByMapUrl(d.matchInfo?.mapId ?? '')?.name ?? 'Bilinmeyen Harita',
+      mapName: this.assets.mapByMapUrl(d.matchInfo?.mapId ?? '')?.name ?? tr('Bilinmeyen Harita'),
       agentName: agent?.name ?? '?',
       agentIcon: agent?.icon ?? null,
       kills: me.stats?.kills ?? 0,
@@ -137,7 +140,9 @@ export class MatchService {
       firstBloods: duels.firstBloods,
       firstDeaths: duels.firstDeaths,
       deathPts: deathPts.slice(0, 40),
-      killPts: killPts.slice(0, 60)
+      killPts: killPts.slice(0, 60),
+      weaponKills: weapons.kills,
+      weaponDeaths: weapons.deaths
     }
   }
 
@@ -203,12 +208,12 @@ export class MatchService {
   /** Round-by-round view of one finished match: kills, deaths, economy and heatmap points. */
   async getMatchDetail(matchId: string): Promise<MatchDetail> {
     const puuid = this.auth.puuid
-    if (!puuid) throw new Error('Riot Client oturumu yok')
+    if (!puuid) throw new Error(tr('Riot Client oturumu yok'))
     await this.assets.load()
     const d = await this.rawDetails(matchId)
     const players: any[] = d.players ?? []
     const me = players.find((p) => p.subject === puuid)
-    if (!me) throw new Error('Oyuncu maç verisinde yok')
+    if (!me) throw new Error(tr('Oyuncu maç verisinde yok'))
     const mapUrl: string = d.matchInfo?.mapId ?? ''
     const map = this.assets.mapByMapUrl(mapUrl)
     const mateIds = players.filter((p) => p.teamId === me.teamId).map((p) => p.subject as string)
@@ -272,7 +277,7 @@ export class MatchService {
     }
     return {
       matchId,
-      mapName: map?.name ?? 'Bilinmeyen Harita',
+      mapName: map?.name ?? tr('Bilinmeyen Harita'),
       mapIcon: map?.minimap ?? null,
       rounds,
       deaths,
@@ -281,10 +286,21 @@ export class MatchService {
     }
   }
 
+  /** GameName#TagLine for the given puuids. Used only for teammates who are not hiding their identity. */
+  async resolveNames(puuids: string[]): Promise<Map<string, string>> {
+    if (!puuids.length) return new Map()
+    const res = await this.auth.remote<Array<{ Subject: string; GameName: string; TagLine: string }>>(
+      'PUT',
+      `${REGION.pd}/name-service/v2/players`,
+      puuids
+    )
+    return new Map(res.filter((n) => n.GameName).map((n) => [n.Subject, `${n.GameName}#${n.TagLine}`]))
+  }
+
   /** Synced local history, newest first. */
   async getOwnHistory(): Promise<MatchSummary[]> {
     const puuid = this.auth.puuid
-    if (!puuid) throw new Error('Riot Client oturumu yok')
+    if (!puuid) throw new Error(tr('Riot Client oturumu yok'))
     await this.syncHistory().catch(() => 0)
     return this.history.matches(puuid).slice(0, 30)
   }
@@ -300,7 +316,7 @@ export class MatchService {
   /** Detailed stats of the player's most recent non-deathmatch game, for the AI coach. */
   async getCoachData(): Promise<CoachData | null> {
     const puuid = this.auth.puuid
-    if (!puuid) throw new Error('Riot Client oturumu yok')
+    if (!puuid) throw new Error(tr('Riot Client oturumu yok'))
     await this.assets.load()
     const latest = (await this.getHistoryIds(puuid, 10)).find((h) => h.queueId !== 'deathmatch')
     if (!latest) return null
@@ -322,7 +338,7 @@ export class MatchService {
     return {
       map: s.mapName,
       agent: s.agentName,
-      queue: s.queue,
+      queue: tr(s.queue),
       result: s.result,
       roundsWon: s.roundsWon,
       roundsLost: s.roundsLost,

@@ -4,6 +4,7 @@ import { log } from '../logger'
 import { HttpError, type AuthService } from './AuthService'
 import type { AssetCacheService } from './AssetCacheService'
 import type { MmrService } from './MmrService'
+import { tr } from '@shared/i18n'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const SCAN_COOLDOWN_MS = 8000
@@ -29,7 +30,9 @@ export class CoreGameService {
     private auth: AuthService,
     private assets: AssetCacheService,
     private mmr: MmrService,
-    private onUpdate: (match: MatchSnapshot | null) => void
+    private onUpdate: (match: MatchSnapshot | null) => void,
+    /** true while light mode is on: socket events then no longer trigger re-scans of a known match */
+    private isLight: () => boolean = () => false
   ) {}
 
   get current(): MatchSnapshot | null {
@@ -45,6 +48,7 @@ export class CoreGameService {
   /** Socket events arrive in bursts: skip when a scan ran recently. Manual scans always run. */
   async scan(manual = false): Promise<MatchSnapshot | null> {
     if (this.scanning) return this.scanning
+    if (!manual && this.last && this.isLight()) return this.last // loadouts do not change during a match
     if (!manual && this.last && Date.now() - this.lastScanAt < SCAN_COOLDOWN_MS) return this.last
     this.scanning = this.doScan(manual).finally(() => (this.scanning = null))
     return this.scanning
@@ -86,7 +90,7 @@ export class CoreGameService {
         return {
           puuid: id,
           // Players in streamer mode hide their identity on purpose: never reveal it.
-          name: p.PlayerIdentity?.Incognito && id !== puuid ? 'Gizli Oyuncu' : nm?.GameName || 'Bilinmiyor',
+          name: p.PlayerIdentity?.Incognito && id !== puuid ? tr('Gizli Oyuncu') : nm?.GameName || tr('Bilinmiyor'),
           tag: p.PlayerIdentity?.Incognito && id !== puuid ? '' : (nm?.TagLine ?? ''),
           teamId: p.TeamID ?? '',
           isSelf: id === puuid,
@@ -103,7 +107,7 @@ export class CoreGameService {
       const map = this.assets.mapByMapUrl(match.MapID)
       const snapshot: MatchSnapshot = {
         matchId,
-        mapName: map?.name ?? 'Bilinmeyen Harita',
+        mapName: map?.name ?? tr('Bilinmeyen Harita'),
         mapSplash: map?.splash ?? null,
         players,
         scannedAt: Date.now()
@@ -111,19 +115,19 @@ export class CoreGameService {
       if (!this.crosshairLogged) {
         this.crosshairLogged = true
         const n = players.filter((p) => p.crosshairCode).length
-        log('CoreGame', 'info', n ? `Nişangah kodu ${n} oyuncuda bulundu` : 'Loadout verisinde nişangah kodu yok (Riot bu alanı vermiyor olabilir)')
+        log('CoreGame', 'info', n ? tr('Nişangah kodu {n} oyuncuda bulundu', { n }) : tr('Loadout verisinde nişangah kodu yok (Riot bu alanı vermiyor olabilir)'))
       }
       this.last = snapshot
       this.lastScanAt = Date.now()
       this.onUpdate(snapshot)
-      log('CoreGame', 'success', `Maç tarandı: ${snapshot.mapName} (${players.length} oyuncu)`)
+      log('CoreGame', 'success', tr('Maç tarandı: {map} ({n} oyuncu)', { map: snapshot.mapName, n: players.length }))
       return snapshot
     } catch (e) {
       if (e instanceof HttpError && e.status === 404) {
-        if (manual) log('CoreGame', 'info', 'Şu an aktif bir maçta değilsin')
+        if (manual) log('CoreGame', 'info', tr('Şu an aktif bir maçta değilsin'))
         return this.last
       }
-      log('CoreGame', 'error', `Tarama hatası: ${(e as Error).message}`)
+      log('CoreGame', 'error', tr('Tarama hatası: {msg}', { msg: (e as Error).message }))
       return this.last
     }
   }

@@ -1,5 +1,6 @@
 import { TriangleAlert } from 'lucide-react'
 import { useApp } from '../store'
+import { tr } from '@shared/i18n'
 
 export default function DodgeBanner(): JSX.Element | null {
   const { dodge, status } = useApp()
@@ -12,12 +13,12 @@ export default function DodgeBanner(): JSX.Element | null {
         <TriangleAlert className="mt-0.5 shrink-0 text-orange-400" size={20} />
         <div className="space-y-1.5">
           <p className="text-sm font-semibold">
-            Dikkat: Takımınızda son maçlarında ağır kaybetme serisi veya çok düşük K/D oranı olan {n} oyuncu var. Bu maçı oynamak istemeyebilirsiniz (Dodge).
+            {tr('Dikkat: Takımınızda son maçlarında ağır kaybetme serisi veya çok düşük K/D oranı olan {n} oyuncu var. Bu maçı oynamak istemeyebilirsiniz (Dodge).', { n })}
           </p>
           <ul className="select-text space-y-0.5 text-xs text-val-text/80">
             {dodge.players.map((p, i) => (
               <li key={p.puuid}>
-                <span className="font-semibold">{p.name ?? `Oyuncu ${i + 1}`}</span>: {p.reasons.join(' · ')}
+                <span className="font-semibold">{p.name ?? tr('Oyuncu {n}', { n: i + 1 })}</span>: {p.reasons.join(' · ')}
               </li>
             ))}
           </ul>

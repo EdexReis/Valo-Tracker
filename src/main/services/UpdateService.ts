@@ -1,6 +1,7 @@
 import { app } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import { log } from '../logger'
+import { tr } from '@shared/i18n'
 
 const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000
 
@@ -10,11 +11,11 @@ export function startUpdater(): void {
   autoUpdater.autoDownload = true
   autoUpdater.autoInstallOnAppQuit = true
 
-  autoUpdater.on('update-available', (i) => log('Updater', 'info', `Yeni sürüm bulundu: ${i.version}, indiriliyor…`))
+  autoUpdater.on('update-available', (i) => log('Updater', 'info', tr('Yeni sürüm bulundu: {v}, indiriliyor…', { v: i.version })))
   autoUpdater.on('update-downloaded', (i) =>
-    log('Updater', 'success', `${i.version} indirildi. Uygulama kapatılınca otomatik kurulacak.`)
+    log('Updater', 'success', tr('{v} indirildi. Uygulama kapatılınca otomatik kurulacak.', { v: i.version }))
   )
-  autoUpdater.on('error', (e) => log('Updater', 'error', `Güncelleme hatası: ${e.message}`))
+  autoUpdater.on('error', (e) => log('Updater', 'error', tr('Güncelleme hatası: {msg}', { msg: e.message })))
 
   const check = (): void => void autoUpdater.checkForUpdates().catch(() => undefined)
   check()

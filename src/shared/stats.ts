@@ -1,4 +1,5 @@
 import type { MatchSummary } from './types'
+import { tr } from './i18n'
 
 export const RANKED_QUEUES = ['competitive', 'unrated']
 
@@ -137,7 +138,7 @@ export function lastWeek(matches: MatchSummary[], now = Date.now()): MatchSummar
 
 export function buildWeeklyReport(allMatches: MatchSummary[], now = Date.now()): string {
   const ms = lastWeek(allMatches, now)
-  if (!ms.length) return '📊 Haftalık Rapor\nBu hafta Rekabetçi/Derecesiz maç oynamadın.'
+  if (!ms.length) return `${tr('📊 Haftalık Rapor')}\n${tr('Bu hafta Rekabetçi/Derecesiz maç oynamadın.')}`
   const t = totals(ms)
   const wins = ms.filter((m) => m.result === 'win').length
   const losses = ms.filter((m) => m.result === 'loss').length
@@ -147,13 +148,13 @@ export function buildWeeklyReport(allMatches: MatchSummary[], now = Date.now()):
   const bestAgent = [...agents].sort((a, b) => b.winRate - a.winRate || b.games - a.games)[0]
   const worstMap = [...maps].sort((a, b) => a.winRate - b.winRate || b.games - a.games)[0]
   const lines = [
-    '📊 Haftalık Rapor',
-    `Maç: ${t.games} (${wins}G - ${losses}M), kazanma %${t.winRate}`,
+    tr('📊 Haftalık Rapor'),
+    tr('Maç: {games} ({w}G - {l}M), kazanma %{rate}', { games: t.games, w: wins, l: losses, rate: t.winRate }),
     `K/D ${t.kd.toFixed(2)} · ACS ${t.acs} · ADR ${t.adr} · HS %${t.hsPercent} · VTS ${t.vts}`,
-    `RR değişimi: ${rr > 0 ? '+' : ''}${rr}`
+    tr('RR değişimi: {rr}', { rr: `${rr > 0 ? '+' : ''}${rr}` })
   ]
-  if (bestAgent) lines.push(`En iyi ajan: ${bestAgent.key} (%${bestAgent.winRate}, ${bestAgent.games} maç)`)
-  if (worstMap && worstMap.winRate < 50) lines.push(`Zorlandığın harita: ${worstMap.key} (%${worstMap.winRate}, ${worstMap.games} maç)`)
+  if (bestAgent) lines.push(tr('En iyi ajan: {agent} (%{rate}, {n} maç)', { agent: bestAgent.key, rate: bestAgent.winRate, n: bestAgent.games }))
+  if (worstMap && worstMap.winRate < 50) lines.push(tr('Zorlandığın harita: {map} (%{rate}, {n} maç)', { map: worstMap.key, rate: worstMap.winRate, n: worstMap.games }))
   return lines.join('\n')
 }
 
@@ -186,10 +187,10 @@ export function weeklyProgress(matches: MatchSummary[], goals: GoalTargets, now 
     done: current >= target
   })
   return [
-    mk('matches', 'Haftalık maç', ms.length, goals.weeklyMatches, 'maç'),
-    mk('wins', 'Haftalık galibiyet', wins, goals.weeklyWins, 'galibiyet'),
-    mk('vts', 'Ortalama VTS', t.vts, goals.avgVts, 'puan'),
-    mk('hs', 'Kafa isabeti', t.hsPercent, goals.hsPercent, '%')
+    mk('matches', tr('Haftalık maç'), ms.length, goals.weeklyMatches, tr('maç')),
+    mk('wins', tr('Haftalık galibiyet'), wins, goals.weeklyWins, tr('galibiyet')),
+    mk('vts', tr('Ortalama VTS'), t.vts, goals.avgVts, tr('puan')),
+    mk('hs', tr('Kafa isabeti'), t.hsPercent, goals.hsPercent, '%')
   ]
 }
 
@@ -221,14 +222,14 @@ export function computeBadges(matches: MatchSummary[]): Badge[] {
   bestWinStreak = Math.max(bestWinStreak, streak)
   const any = (f: (m: MatchSummary) => boolean): boolean => matches.some(f)
   return [
-    { key: 's', label: 'S Sınıfı', description: 'Bir maçta VTS 800 üstü', unlocked: any((m) => (m.vts?.score ?? 0) >= 800) },
-    { key: 'ace', label: 'Ace', description: 'Bir raundda 5 kill', unlocked: any((m) => (m.vts?.multiKills?.k5 ?? 0) > 0) },
-    { key: 'clutch', label: 'Clutch Ustası', description: 'Tek maçta 3 clutch', unlocked: any((m) => (m.vts?.clutches ?? 0) >= 3) },
-    { key: 'hs', label: 'Kafa Avcısı', description: 'Bir maçta %40+ kafa isabeti', unlocked: any((m) => m.hsPercent >= 40) },
-    { key: 'streak', label: 'Seri', description: '5 maç üst üste galibiyet', unlocked: bestWinStreak >= 5 },
-    { key: 'comeback', label: 'Tilt Kırıcı', description: '3 kayıptan sonra galibiyet', unlocked: comeback },
-    { key: 'fb', label: 'Açılış Ustası', description: 'Bir maçta 8+ ilk kan', unlocked: any((m) => m.firstBloods >= 8) },
-    { key: '100', label: '100 Maç', description: 'Kayıtlı 100 maç', unlocked: matches.length >= 100 }
+    { key: 's', label: tr('S Sınıfı'), description: tr('Bir maçta VTS 800 üstü'), unlocked: any((m) => (m.vts?.score ?? 0) >= 800) },
+    { key: 'ace', label: tr('Ace'), description: tr('Bir raundda 5 kill'), unlocked: any((m) => (m.vts?.multiKills?.k5 ?? 0) > 0) },
+    { key: 'clutch', label: tr('Clutch Ustası'), description: tr('Tek maçta 3 clutch'), unlocked: any((m) => (m.vts?.clutches ?? 0) >= 3) },
+    { key: 'hs', label: tr('Kafa Avcısı'), description: tr('Bir maçta %40+ kafa isabeti'), unlocked: any((m) => m.hsPercent >= 40) },
+    { key: 'streak', label: tr('Seri'), description: tr('5 maç üst üste galibiyet'), unlocked: bestWinStreak >= 5 },
+    { key: 'comeback', label: tr('Tilt Kırıcı'), description: tr('3 kayıptan sonra galibiyet'), unlocked: comeback },
+    { key: 'fb', label: tr('Açılış Ustası'), description: tr('Bir maçta 8+ ilk kan'), unlocked: any((m) => m.firstBloods >= 8) },
+    { key: '100', label: tr('100 Maç'), description: tr('Kayıtlı 100 maç'), unlocked: matches.length >= 100 }
   ]
 }
 
@@ -261,4 +262,71 @@ export function projectRank(newestFirst: MatchSummary[], currentRR: number): Ran
     matchesToNext: expected > 0 ? Math.ceil((100 - currentRR) / expected) : null,
     sample: comp.length
   }
+}
+
+export interface WeaponRow {
+  /** weapon uuid, or ability / spike / fall / other */
+  key: string
+  kills: number
+  deaths: number
+  /** share of all kills, 0-100 */
+  share: number
+  killsPerMatch: number
+}
+
+/** Kills and deaths per finishing weapon across the given matches (only matches that carry weapon data). */
+export function weaponStats(matches: MatchSummary[]): WeaponRow[] {
+  const withData = matches.filter((m) => m.weaponKills || m.weaponDeaths)
+  const kills = new Map<string, number>()
+  const deaths = new Map<string, number>()
+  for (const m of withData) {
+    for (const [k, n] of Object.entries(m.weaponKills ?? {})) kills.set(k, (kills.get(k) ?? 0) + n)
+    for (const [k, n] of Object.entries(m.weaponDeaths ?? {})) deaths.set(k, (deaths.get(k) ?? 0) + n)
+  }
+  const totalKills = [...kills.values()].reduce((a, b) => a + b, 0) || 1
+  const games = withData.length || 1
+  return [...new Set([...kills.keys(), ...deaths.keys()])]
+    .map((key) => ({
+      key,
+      kills: kills.get(key) ?? 0,
+      deaths: deaths.get(key) ?? 0,
+      share: Math.round(((kills.get(key) ?? 0) / totalKills) * 100),
+      killsPerMatch: Math.round(((kills.get(key) ?? 0) / games) * 10) / 10
+    }))
+    .sort((a, b) => b.kills - a.kills || b.deaths - a.deaths)
+}
+
+/**
+ * Win rate with each teammate. `matesByMatch` maps a match id to the puuids of the teammates seen in it;
+ * matches without an entry are skipped and draws do not count. Players seen in fewer than `minGames` are dropped.
+ */
+export function coPlayerStats(
+  newestFirst: MatchSummary[],
+  matesByMatch: Record<string, string[]>,
+  minGames = 2
+): Array<Omit<import('./types').CoPlayerRow, 'name'>> {
+  const acc = new Map<string, { games: number; wins: number; losses: number; vts: number[] }>()
+  for (const m of newestFirst) {
+    const mates = matesByMatch[m.matchId]
+    if (!mates || m.result === 'draw') continue
+    for (const puuid of new Set(mates)) {
+      const a = acc.get(puuid) ?? { games: 0, wins: 0, losses: 0, vts: [] }
+      a.games++
+      if (m.result === 'win') a.wins++
+      else a.losses++
+      if (m.vts) a.vts.push(m.vts.score)
+      acc.set(puuid, a)
+    }
+  }
+  return [...acc.entries()]
+    .filter(([, a]) => a.games >= minGames)
+    .map(([puuid, a]) => ({
+      puuid,
+      games: a.games,
+      wins: a.wins,
+      losses: a.losses,
+      winRate: Math.round((a.wins / a.games) * 100),
+      avgVts: Math.round(avg(a.vts))
+    }))
+    .sort((x, y) => y.games - x.games || y.winRate - x.winRate)
 }

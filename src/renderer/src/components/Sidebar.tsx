@@ -1,4 +1,5 @@
 import type { TabDef } from '../tabs'
+import { tr } from '@shared/i18n'
 
 interface Props {
   tabs: TabDef[]
@@ -20,7 +21,7 @@ export default function Sidebar({ tabs, active, onSelect }: Props): JSX.Element 
             }`}
           >
             <Icon size={18} />
-            {label}
+            {tr(label)}
           </button>
         )
       })}

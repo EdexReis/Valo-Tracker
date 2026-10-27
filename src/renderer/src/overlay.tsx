@@ -2,6 +2,7 @@ import { StrictMode, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { MatchPlayer, MatchSnapshot } from '@shared/types'
 import './index.css'
+import { setLanguage, tr } from '@shared/i18n'
 
 // The page itself stays fully transparent; only the panel is drawn.
 document.documentElement.style.background = 'transparent'
@@ -36,8 +37,14 @@ function Team({ title, color, players }: { title: string; color: string; players
 
 function Overlay(): JSX.Element {
   const [match, setMatch] = useState<MatchSnapshot | null>(null)
+  const [, setLang] = useState('')
 
   useEffect(() => {
+    void window.api.getAppSettings().then((s) => {
+      setLanguage(s.language)
+      setLang(s.language) // re-render in the saved language
+      document.documentElement.lang = s.language
+    })
     void window.api.getMatch().then(setMatch)
     return window.api.onMatch(setMatch)
   }, [])
@@ -48,11 +55,11 @@ function Overlay(): JSX.Element {
         {match ? (
           <>
             <div className="px-2 text-[11px] font-bold uppercase tracking-widest text-val-mute">{match.mapName}</div>
-            <Team title="Mavi Takım" color="text-val-blue" players={match.players.filter((p) => p.teamId === 'Blue')} />
-            <Team title="Kırmızı Takım" color="text-val-red" players={match.players.filter((p) => p.teamId === 'Red')} />
+            <Team title={tr('Mavi Takım')} color="text-val-blue" players={match.players.filter((p) => p.teamId === 'Blue')} />
+            <Team title={tr('Kırmızı Takım')} color="text-val-red" players={match.players.filter((p) => p.teamId === 'Red')} />
           </>
         ) : (
-          <div className="px-2 py-3 text-xs text-val-mute">Maç verisi henüz yok</div>
+          <div className="px-2 py-3 text-xs text-val-mute">{tr('Maç verisi henüz yok')}</div>
         )}
       </div>
     </div>

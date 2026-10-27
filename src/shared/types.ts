@@ -34,9 +34,16 @@ export interface MapInfo {
   calib: MapCalib | null
 }
 
+export interface WeaponInfo {
+  uuid: string
+  name: string
+  icon: string | null
+}
+
 export interface AssetsPayload {
   agents: AgentInfo[]
   maps: MapInfo[]
+  weapons: WeaponInfo[]
 }
 
 export interface InstalockSettings {
@@ -166,6 +173,9 @@ export interface MatchSummary {
   /** where the player died / got kills, as minimap fractions 0-1 */
   deathPts?: Pt[]
   killPts?: Pt[]
+  /** kills / deaths by finishing weapon: a weapon uuid, or ability / spike / fall / other */
+  weaponKills?: Record<string, number>
+  weaponDeaths?: Record<string, number>
 }
 
 export interface SessionRR {
@@ -314,6 +324,12 @@ export interface AppSettings {
   aiUrl: string
   /** empty = first chat model the server reports */
   aiModel: string
+  /** post a summary to the Discord webhook after each ranked/unrated match */
+  discordMatchSummary: boolean
+  /** interface language */
+  language: 'tr' | 'en'
+  /** lower priority and hold back optional background work while a match runs */
+  lightMode: boolean
 }
 
 export interface RRPoint {
@@ -329,6 +345,8 @@ export interface StatsPayload {
 
 export interface ExportResult {
   ok: boolean
+  /** the user closed the save dialog */
+  canceled?: boolean
   path?: string
   error?: string
 }
@@ -375,10 +393,35 @@ export interface CoachEvent {
   result: CoachResult
 }
 
+export interface DiscordWebhookView {
+  configured: boolean
+  /** masked address, e.g. ...a1b2c3 */
+  hint: string
+}
+
+export interface WebhookResult {
+  ok: boolean
+  error?: string
+}
+
+export interface CoPlayerRow {
+  puuid: string
+  /** resolved at view time; null when Valorant is closed */
+  name: string | null
+  games: number
+  wins: number
+  losses: number
+  /** 0-100 */
+  winRate: number
+  /** my average VTS in these games */
+  avgVts: number
+}
+
 export type OverlayCorner = 'tr' | 'tl' | 'br' | 'bl'
 
 export interface BackupResult {
   ok: boolean
+  canceled?: boolean
   path?: string
   error?: string
 }
@@ -420,12 +463,18 @@ export interface ValoApi {
   exportBackup(): Promise<BackupResult>
   importBackup(): Promise<BackupResult>
   testAI(): Promise<AiTestResult>
+  getDiscordWebhook(): Promise<DiscordWebhookView>
+  saveDiscordWebhook(url: string): Promise<DiscordWebhookView>
+  testDiscordWebhook(url: string): Promise<WebhookResult>
+  sendLastMatchToDiscord(): Promise<WebhookResult>
+  getCoPlayers(): Promise<CoPlayerRow[]>
   getSessionRR(): Promise<SessionRR>
   getTelegram(): Promise<TelegramSettingsView>
   saveTelegram(input: TelegramInput): Promise<TelegramSettingsView>
   testTelegram(input: TelegramInput): Promise<TelegramResult>
   getCompWarning(): Promise<CompWarning | null>
   onCompWarning(cb: (w: CompWarning | null) => void): () => void
+  onLightMode(cb: (on: boolean) => void): () => void
   getAICoaching(mode: CoachMode): Promise<CoachResult>
   onCoach(cb: (e: CoachEvent) => void): () => void
   getDodgeWarning(): Promise<DodgeWarning | null>

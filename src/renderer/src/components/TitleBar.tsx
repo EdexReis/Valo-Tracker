@@ -1,6 +1,7 @@
 import { Minus, Square, X } from 'lucide-react'
 import StatusBadge from './StatusBadge'
 import SessionCounter from './SessionCounter'
+import { tr } from '@shared/i18n'
 
 export default function TitleBar(): JSX.Element {
   const btn = 'no-drag flex h-8 w-11 items-center justify-center text-val-mute transition-colors hover:text-val-text'
@@ -15,13 +16,13 @@ export default function TitleBar(): JSX.Element {
         <SessionCounter />
       </div>
       <div className="flex">
-        <button className={`${btn} hover:bg-val-raised`} onClick={() => window.api.windowAction('minimize')} aria-label="Küçült">
+        <button className={`${btn} hover:bg-val-raised`} onClick={() => window.api.windowAction('minimize')} aria-label={tr('Küçült')}>
           <Minus size={14} />
         </button>
-        <button className={`${btn} hover:bg-val-raised`} onClick={() => window.api.windowAction('maximize')} aria-label="Büyüt">
+        <button className={`${btn} hover:bg-val-raised`} onClick={() => window.api.windowAction('maximize')} aria-label={tr('Büyüt')}>
           <Square size={11} />
         </button>
-        <button className={`${btn} hover:bg-val-red hover:text-white`} onClick={() => window.api.windowAction('close')} aria-label="Kapat">
+        <button className={`${btn} hover:bg-val-red hover:text-white`} onClick={() => window.api.windowAction('close')} aria-label={tr('Kapat')}>
           <X size={15} />
         </button>
       </div>

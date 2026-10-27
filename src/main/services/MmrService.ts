@@ -2,6 +2,7 @@ import type { PlayerMmr, SeasonRank } from '@shared/types'
 import { REGION } from '../constants'
 import type { AuthService } from './AuthService'
 import type { AssetCacheService } from './AssetCacheService'
+import { tr } from '@shared/i18n'
 
 interface MmrResponse {
   QueueSkills?: {
@@ -30,7 +31,7 @@ export class MmrService {
         const info = this.assets.tier(tier)
         return {
           seasonId: id,
-          name: this.assets.season(id)?.name ?? 'Bilinmeyen sezon',
+          name: this.assets.season(id)?.name ?? tr('Bilinmeyen sezon'),
           start: this.assets.season(id)?.start ?? 0,
           tier,
           tierName: info.name,

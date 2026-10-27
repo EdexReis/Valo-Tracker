@@ -2,6 +2,7 @@ import type { CollectionData, StoreSkin, StorefrontData } from '@shared/types'
 import { REGION } from '../constants'
 import { HttpError, type AuthService } from './AuthService'
 import type { AssetCacheService } from './AssetCacheService'
+import { tr } from '@shared/i18n'
 
 /** Clean shape returned by `fetchRaw` (skin level UUIDs only). */
 export interface StorefrontRaw {
@@ -33,7 +34,7 @@ export class StorefrontService {
 
   async fetchRaw(): Promise<StorefrontRaw> {
     const puuid = this.auth.puuid
-    if (!puuid) throw new Error('Riot Client oturumu yok')
+    if (!puuid) throw new Error(tr('Riot Client oturumu yok'))
 
     let data: any
     try {
@@ -82,7 +83,7 @@ export class StorefrontService {
   /** Owned skins (first levels) with their store price when one is known. */
   async getCollection(): Promise<CollectionData> {
     const puuid = this.auth.puuid
-    if (!puuid) throw new Error('Riot Client oturumu yok')
+    if (!puuid) throw new Error(tr('Riot Client oturumu yok'))
     const SKIN_LEVEL_TYPE = 'e7c63390-eda7-46e0-bb7a-a6abdacd2433'
     const [ent, prices] = await Promise.all([
       this.auth.remote<{ Entitlements?: Array<{ ItemID: string }> }>('GET', `${REGION.pd}/store/v1/entitlements/${puuid}/${SKIN_LEVEL_TYPE}`),

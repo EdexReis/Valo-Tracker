@@ -2,6 +2,7 @@ import TelegramBot from 'node-telegram-bot-api'
 import type { TelegramInput, TelegramResult } from '@shared/types'
 import { log } from '../logger'
 import type { SettingsService } from './SettingsService'
+import { tr } from '@shared/i18n'
 
 const MATCH_FOUND = '🚨 VALORANT: Maç bulundu! Hemen bilgisayar başına dön!'
 const TEST_MESSAGE = '✅ Valo Tracker: Telegram bağlantısı çalışıyor.'
@@ -17,8 +18,16 @@ export class TelegramService {
 
   constructor(private settings: SettingsService) {}
 
-  setHandlers(handlers: Record<string, () => Promise<string>>): void {
+  private menu: () => Array<{ command: string; description: string }> = () => []
+
+  setHandlers(handlers: Record<string, () => Promise<string>>, menu: () => Array<{ command: string; description: string }>): void {
     this.handlers = handlers
+    this.menu = menu
+  }
+
+  /** Re-registers the command list in the bot menu (the language may have changed). */
+  refreshMenu(): void {
+    this.listener?.setMyCommands(this.menu()).catch(() => undefined)
   }
 
   /**
@@ -34,12 +43,12 @@ export class TelegramService {
     const bot = new TelegramBot(botToken, { polling: true })
     this.listener = bot
     this.listenerToken = botToken
-    bot.setMyCommands(Object.keys(this.handlers).map((c) => ({ command: c, description: `/${c}` }))).catch(() => undefined)
+    bot.setMyCommands(this.menu()).catch(() => undefined)
     bot.on('polling_error', (e) => {
       // Throttle: a missing network would otherwise flood the log.
       if (Date.now() - this.lastPollError < 60_000) return
       this.lastPollError = Date.now()
-      log('Telegram', 'error', `Komut dinleyici hatası: ${String(e.message).split(botToken).join('***')}`)
+      log('Telegram', 'error', tr('Komut dinleyici hatası: {msg}', { msg: String(e.message).split(botToken).join('***') }))
     })
     bot.on('message', (msg) => {
       if (String(msg.chat.id) !== chatId || !msg.text?.startsWith('/')) return
@@ -47,7 +56,7 @@ export class TelegramService {
       const handler = this.handlers[cmd]
       if (!handler) return
       handler()
-        .catch(() => 'Bu bilgi şu an alınamadı. Valorant açık ve giriş yapılmış mı?')
+        .catch(() => tr('Bu bilgi şu an alınamadı. Valorant açık ve giriş yapılmış mı?'))
         .then((text) => bot.sendMessage(chatId, text))
         .catch(() => undefined)
     })
@@ -85,8 +94,8 @@ export class TelegramService {
     const saved = this.settings.getTelegram()
     const token = input.botToken.trim() || saved.botToken
     const chatId = input.chatId.trim() || saved.chatId
-    if (!token || !chatId) return Promise.resolve({ ok: false, error: 'Bot token ve Chat ID gerekli' })
-    return this.send(token, chatId, TEST_MESSAGE)
+    if (!token || !chatId) return Promise.resolve({ ok: false, error: tr('Bot token ve Chat ID gerekli') })
+    return this.send(token, chatId, tr(TEST_MESSAGE))
   }
 
   /** Sends a plain message to the saved chat. Returns false when Telegram is not configured or fails. */
@@ -100,8 +109,8 @@ export class TelegramService {
   async notifyMatchFound(): Promise<void> {
     const { botToken, chatId } = this.settings.getTelegram()
     if (!botToken || !chatId) return
-    const r = await this.send(botToken, chatId, MATCH_FOUND)
-    if (r.ok) log('Telegram', 'success', 'Maç bildirimi gönderildi')
-    else log('Telegram', 'error', `Bildirim gönderilemedi: ${r.error}`)
+    const r = await this.send(botToken, chatId, tr(MATCH_FOUND))
+    if (r.ok) log('Telegram', 'success', tr('Maç bildirimi gönderildi'))
+    else log('Telegram', 'error', tr('Bildirim gönderilemedi: {msg}', { msg: r.error ?? '' }))
   }
 }

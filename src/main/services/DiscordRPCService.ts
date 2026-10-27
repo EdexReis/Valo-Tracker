@@ -1,5 +1,6 @@
 import RPC from 'discord-rpc'
 import { log } from '../logger'
+import { tr } from '@shared/i18n'
 
 const CLIENT_ID = '1561313318864560229'
 const RECONNECT_MS = 10_000
@@ -40,7 +41,7 @@ export class DiscordRPCService {
     client.on('ready', () => {
       this.client = client
       this.ready = true
-      if (!this.loggedConnected) log('Discord', 'success', 'Discord Rich Presence bağlandı')
+      if (!this.loggedConnected) log('Discord', 'success', tr('Discord Rich Presence bağlandı'))
       this.loggedConnected = true
       this.lastSent = ''
       this.flush()

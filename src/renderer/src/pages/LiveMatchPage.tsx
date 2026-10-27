@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Check, Crosshair, EyeOff, Loader2, RefreshCw } from 'lucide-react'
 import type { MatchPlayer } from '@shared/types'
 import { useApp } from '../store'
+import { locale, tr } from '@shared/i18n'
 
 function CrosshairButton({ code }: { code: string }): JSX.Element {
   const [copied, setCopied] = useState(false)
@@ -17,11 +18,11 @@ function CrosshairButton({ code }: { code: string }): JSX.Element {
   return (
     <button
       onClick={() => void copy()}
-      title={copied ? 'Kopyalandı!' : `Nişangah kodunu kopyala: ${code}`}
+      title={copied ? tr('Kopyalandı!') : tr('Nişangah kodunu kopyala: {code}', { code })}
       className={`flex items-center gap-1 rounded p-1 text-xs transition-colors ${copied ? 'text-emerald-400' : 'text-val-mute hover:text-val-text'}`}
     >
       {copied ? <Check size={15} /> : <Crosshair size={15} />}
-      {copied && <span>Kopyalandı!</span>}
+      {copied && <span>{tr('Kopyalandı!')}</span>}
     </button>
   )
 }
@@ -40,8 +41,8 @@ function PlayerCard({ p }: { p: MatchPlayer }): JSX.Element {
             {p.name}
             {p.tag && <span className="font-normal text-val-mute"> #{p.tag}</span>}
             {p.isStreamerMode && (
-              <span title="Yayıncı modu: bu oyuncu kimliğini gizliyor" className="ml-2 inline-flex items-center gap-1 rounded bg-purple-500/20 px-1.5 py-0.5 align-middle text-[10px] font-bold text-purple-300">
-                <EyeOff size={11} /> TTV / Gizli
+              <span title={tr('Yayıncı modu: bu oyuncu kimliğini gizliyor')} className="ml-2 inline-flex items-center gap-1 rounded bg-purple-500/20 px-1.5 py-0.5 align-middle text-[10px] font-bold text-purple-300">
+                <EyeOff size={11} /> {tr('TTV / Gizli')}
               </span>
             )}
           </div>
@@ -55,7 +56,7 @@ function PlayerCard({ p }: { p: MatchPlayer }): JSX.Element {
                 {p.mmr.currentTierName}
                 {p.mmr.currentTier > 0 && ` - ${p.mmr.currentRR} RR`}
               </div>
-              <div className="text-[11px] text-val-mute/70">Tepe: {p.mmr.peakTierName}</div>
+              <div className="text-[11px] text-val-mute/70">{tr('Tepe: {rank}', { rank: p.mmr.peakTierName })}</div>
             </div>
             {p.mmr.currentTierIcon && <img src={p.mmr.currentTierIcon} alt="" width={24} height={24} className="h-6 w-6" />}
           </div>
@@ -101,9 +102,9 @@ export default function LiveMatchPage(): JSX.Element {
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold">Canlı Maç</h1>
+          <h1 className="text-xl font-bold">{tr('Canlı Maç')}</h1>
           <p className="text-sm text-val-mute">
-            {match ? `${match.mapName} · ${new Date(match.scannedAt).toLocaleTimeString('tr-TR')}` : 'Aktif maç yok'}
+            {match ? `${match.mapName} · ${new Date(match.scannedAt).toLocaleTimeString(locale())}` : tr('Aktif maç yok')}
           </p>
         </div>
         <button
@@ -112,18 +113,18 @@ export default function LiveMatchPage(): JSX.Element {
           className="flex items-center gap-2 rounded bg-val-red px-4 py-2 text-sm font-bold transition-opacity hover:opacity-90 disabled:opacity-40"
         >
           {scanning ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
-          Durumu Yenile / Maçı Tara
+          {tr('Durumu Yenile / Maçı Tara')}
         </button>
       </div>
 
       {match ? (
         <div className="flex gap-5">
-          <Team title="Mavi Takım" color="text-val-blue" players={blue} />
-          <Team title="Kırmızı Takım" color="text-val-red" players={red} />
+          <Team title={tr('Mavi Takım')} color="text-val-blue" players={blue} />
+          <Team title={tr('Kırmızı Takım')} color="text-val-red" players={red} />
         </div>
       ) : (
         <div className="rounded border border-dashed border-val-line p-12 text-center text-val-mute">
-          Bir maça girdiğinde oyuncular ve skinler otomatik olarak burada görünür.
+          {tr('Bir maça girdiğinde oyuncular ve skinler otomatik olarak burada görünür.')}
         </div>
       )}
     </div>

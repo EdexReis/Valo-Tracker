@@ -1,8 +1,9 @@
 import path from 'node:path'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { app } from 'electron'
-import type { AgentInfo, AssetsPayload, MapInfo, Pt } from '@shared/types'
+import type { AgentInfo, AssetsPayload, MapInfo, Pt, WeaponInfo } from '@shared/types'
 import { log } from '../logger'
+import { getLanguage, tr } from '@shared/i18n'
 
 interface SlimSkin {
   uuid: string
@@ -32,6 +33,9 @@ export interface SeasonInfo {
 
 interface CacheFile {
   savedAt: number
+  /** language of the tier names */
+  lang: string
+  weapons: WeaponInfo[]
   seasons: SeasonInfo[]
   activeSeasonId: string | null
   tiers: TierInfo[]
@@ -64,8 +68,15 @@ export class AssetCacheService {
   private tierByNum = new Map<number, TierInfo>()
   private activeSeason: string | null = null
   private seasonById = new Map<string, SeasonInfo>()
+  private weapons: WeaponInfo[] = []
   private loading: Promise<void> | null = null
   private ready = false
+
+  /** Forces a reload (e.g. the interface language changed and tier names must be fetched again). */
+  invalidate(): void {
+    this.ready = false
+    void this.load().catch(() => undefined)
+  }
 
   /** Loads from disk cache when fresh, otherwise from valorant-api.com. Safe to call repeatedly. */
   load(): Promise<void> {
@@ -81,7 +92,7 @@ export class AssetCacheService {
     } catch {
       /* no cache */
     }
-    if (!cache || !cache.tiers || cache.agents.some((a) => a.role === undefined) || !cache.seasons || cache.maps.some((m) => m.calib === undefined) || Date.now() - cache.savedAt > TTL_MS) {
+    if (!cache || !cache.tiers || cache.agents.some((a) => a.role === undefined) || !cache.seasons || !cache.weapons || cache.lang !== getLanguage() || cache.maps.some((m) => m.calib === undefined) || Date.now() - cache.savedAt > TTL_MS) {
       try {
         cache = await this.fetchAll()
         try {
@@ -89,13 +100,13 @@ export class AssetCacheService {
         } catch {
           /* non-fatal */
         }
-        log('Assets', 'success', `Varlıklar yüklendi (${cache.agents.length} ajan, ${cache.maps.length} harita, ${cache.skins.length} skin)`)
+        log('Assets', 'success', tr('Varlıklar yüklendi ({agents} ajan, {maps} harita, {skins} skin)', { agents: cache.agents.length, maps: cache.maps.length, skins: cache.skins.length }))
       } catch (e) {
         if (!cache) {
-          log('Assets', 'error', `Varlıklar yüklenemedi: ${(e as Error).message}`)
+          log('Assets', 'error', tr('Varlıklar yüklenemedi: {msg}', { msg: (e as Error).message }))
           throw e
         }
-        log('Assets', 'info', 'Çevrimdışı, eski önbellek kullanılıyor')
+        log('Assets', 'info', tr('Çevrimdışı, eski önbellek kullanılıyor'))
       }
     }
     this.index(cache)
@@ -103,18 +114,21 @@ export class AssetCacheService {
   }
 
   private async fetchAll(): Promise<CacheFile> {
-    const [agents, maps, skins, buddies, seasons, tierSets] = await Promise.all([
+    const [agents, maps, skins, buddies, seasons, tierSets, weapons] = await Promise.all([
       getData('/agents?isPlayableCharacter=true'),
       getData('/maps'),
       getData('/weapons/skins'),
       getData('/buddies'),
       getData('/seasons'),
-      getData('/competitivetiers?language=tr-TR')
+      getData(`/competitivetiers?language=${getLanguage() === 'en' ? 'en-US' : 'tr-TR'}`),
+      getData('/weapons')
     ])
     const activeAct = seasons.find((s) => s.type === 'EAresSeasonType::Act' && s.isActive)
     const latestTiers: any[] = tierSets[tierSets.length - 1]?.tiers ?? []
     return {
       savedAt: Date.now(),
+      lang: getLanguage(),
+      weapons: weapons.map((w) => ({ uuid: w.uuid as string, name: w.displayName as string, icon: (w.displayIcon as string) ?? null })),
       seasons: seasons
         .filter((s) => s.type === 'EAresSeasonType::Act')
         .map((s) => {
@@ -160,6 +174,7 @@ export class AssetCacheService {
     this.maps = c.maps
     this.agentById = new Map(c.agents.map((a) => [a.uuid, a]))
     this.mapByUrl = new Map(c.maps.map((m) => [m.mapUrl, m]))
+    this.weapons = c.weapons
     this.activeSeason = c.activeSeasonId
     this.seasonById = new Map(c.seasons.map((s) => [s.uuid, s]))
     this.tierByNum = new Map(c.tiers.map((t) => [t.tier, t]))
@@ -177,6 +192,7 @@ export class AssetCacheService {
 
   getAssets(): AssetsPayload {
     return {
+      weapons: this.weapons,
       agents: this.agents,
       // playable maps only (those with a map URL under /Game/Maps and a splash)
       maps: this.maps.filter((m) => m.splash && m.mapUrl.startsWith('/Game/Maps/')).sort((a, b) => a.name.localeCompare(b.name))
@@ -202,7 +218,7 @@ export class AssetCacheService {
   }
 
   tier(num: number): TierInfo {
-    return this.tierByNum.get(num) ?? { tier: num, name: num === 0 ? 'Derecesiz' : `Tier ${num}`, icon: null }
+    return this.tierByNum.get(num) ?? { tier: num, name: num === 0 ? tr('Derecesiz') : `Tier ${num}`, icon: null }
   }
 
   agent(uuid: string): AgentInfo | undefined {
@@ -237,7 +253,7 @@ export class AssetCacheService {
   resolveSkin(skinId?: string, chromaId?: string): { name: string; icon: string | null } {
     const skin = skinId ? this.skinByKey.get(skinId.toLowerCase()) : undefined
     const chroma = chromaId ? this.chromaById.get(chromaId.toLowerCase()) : undefined
-    return { name: skin?.name ?? 'Bilinmiyor', icon: chroma?.icon ?? skin?.icon ?? null }
+    return { name: skin?.name ?? tr('Bilinmiyor'), icon: chroma?.icon ?? skin?.icon ?? null }
   }
 
   resolveBuddy(buddyId?: string): { name: string; icon: string | null } | null {
