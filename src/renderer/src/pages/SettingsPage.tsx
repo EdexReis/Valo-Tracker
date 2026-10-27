@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { Loader2, Save, Send, ShieldAlert } from 'lucide-react'
+import { Download, Loader2, Save, Send, ShieldAlert, Upload } from 'lucide-react'
 import type { TelegramSettingsView } from '@shared/types'
 import { REGION_OPTIONS, SHORTCUT_OPTIONS } from '@shared/options'
 import { useApp } from '../store'
@@ -68,11 +68,41 @@ function GeneralPanel(): JSX.Element {
           <Toggle on={s.overlayEnabled} onChange={(v) => updateApp({ overlayEnabled: v })} label="Overlay" />
         </div>
       </Row>
+      <Row title="Overlay konumu ve saydamlığı" hint="Maç sırasında overlay'in ekranın hangi köşesinde ve ne kadar opak görüneceği (ana monitör).">
+        <div className="flex items-center gap-3">
+          <select
+            className={field}
+            value={s.overlayCorner}
+            onChange={(e) => updateApp({ overlayCorner: e.target.value as typeof s.overlayCorner })}
+            disabled={!s.overlayEnabled}
+            aria-label="Overlay köşesi"
+          >
+            <option value="tr">Sağ üst</option>
+            <option value="tl">Sol üst</option>
+            <option value="br">Sağ alt</option>
+            <option value="bl">Sol alt</option>
+          </select>
+          <input
+            type="range"
+            min={40}
+            max={100}
+            step={5}
+            value={Math.round(s.overlayOpacity * 100)}
+            onChange={(e) => updateApp({ overlayOpacity: Number(e.target.value) / 100 })}
+            disabled={!s.overlayEnabled}
+            aria-label="Overlay saydamlığı"
+            className="w-28"
+          />
+        </div>
+      </Row>
       <Row title="Dodge asistanı" hint="Ajan seçiminde takım arkadaşlarının son maçlarına bakıp uyarır.">
         <Toggle on={s.dodgeAssistant} onChange={(v) => updateApp({ dodgeAssistant: v })} label="Dodge asistanı" />
       </Row>
       <Row title="Windows bildirimleri" hint="Wishlist, mola ve AI koç bildirimleri Windows'ta da gösterilir.">
         <Toggle on={s.nativeNotifications} onChange={(v) => updateApp({ nativeNotifications: v })} label="Bildirimler" />
+      </Row>
+      <Row title="Müzik kontrolü" hint="Maç bulununca Windows'ta çalan müziği (Spotify, YouTube Music, tarayıcı…) duraklatır, lobiye dönünce devam ettirir. Sadece kendi durdurduğunu başlatır.">
+        <Toggle on={s.musicControl} onChange={(v) => updateApp({ musicControl: v })} label="Müzik kontrolü" />
       </Row>
       <Row title="Haftalık rapor" hint="Pazar akşamı 20:00'den sonra haftalık özet bildirimi gönderir.">
         <Toggle on={s.weeklyReport} onChange={(v) => updateApp({ weeklyReport: v })} label="Haftalık rapor" />
@@ -216,11 +246,105 @@ function TelegramPanel(): JSX.Element {
   )
 }
 
+function AiPanel(): JSX.Element {
+  const { appSettings: s, updateApp } = useApp()
+  const [url, setUrl] = useState(s.aiUrl)
+  const [model, setModel] = useState(s.aiModel)
+  const [notice, setNotice] = useState<Notice>(null)
+  const [busy, setBusy] = useState(false)
+
+  // The saved values arrive after the first render.
+  useEffect(() => {
+    setUrl(s.aiUrl)
+    setModel(s.aiModel)
+  }, [s.aiUrl, s.aiModel])
+
+  const test = async (): Promise<void> => {
+    setBusy(true)
+    setNotice(null)
+    updateApp({ aiUrl: url, aiModel: model })
+    await new Promise((r) => setTimeout(r, 300)) // let the main process save before it is asked to connect
+    const r = await window.api.testAI()
+    setNotice(r.ok ? { kind: 'ok', text: `Bağlandı. Kullanılacak model: ${r.model}` } : { kind: 'error', text: r.error ?? 'Bağlanılamadı.' })
+    setBusy(false)
+  }
+
+  const input = `${field} w-full px-3 py-2 select-text`
+  return (
+    <section className="space-y-4 rounded border border-val-line bg-val-panel p-5">
+      <div>
+        <h2 className="text-base font-bold">AI Koç sunucusu</h2>
+        <p className="text-sm text-val-mute">
+          LM Studio (varsayılan 1234) veya Ollama (<code>http://127.0.0.1:11434/v1</code>) gibi OpenAI uyumlu bir yerel sunucu. Maç verilerinin bilgisayarından çıkmaması için yalnızca
+          bu bilgisayardaki adresler (127.0.0.1 / localhost) kabul edilir.
+        </p>
+      </div>
+      <div className="grid gap-3 md:grid-cols-2">
+        <label className="space-y-1">
+          <span className="text-xs font-bold uppercase tracking-widest text-val-mute">Adres</span>
+          <input className={input} value={url} onChange={(e) => setUrl(e.target.value)} placeholder="http://127.0.0.1:1234/v1" />
+        </label>
+        <label className="space-y-1">
+          <span className="text-xs font-bold uppercase tracking-widest text-val-mute">Model (boşsa otomatik)</span>
+          <input className={input} value={model} onChange={(e) => setModel(e.target.value)} placeholder="örn. llama3.1:8b" />
+        </label>
+      </div>
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => void test()}
+          disabled={busy}
+          className="flex items-center gap-2 rounded border border-val-line px-4 py-2 text-sm font-semibold hover:bg-val-raised disabled:opacity-40"
+        >
+          {busy ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+          Kaydet ve bağlantıyı dene
+        </button>
+        {notice && <span className={`select-text text-sm ${notice.kind === 'ok' ? 'text-emerald-400' : 'text-val-red'}`}>{notice.text}</span>}
+      </div>
+    </section>
+  )
+}
+
+function BackupPanel(): JSX.Element {
+  const [notice, setNotice] = useState<Notice>(null)
+  const run = async (kind: 'export' | 'import'): Promise<void> => {
+    const r = kind === 'export' ? await window.api.exportBackup() : await window.api.importBackup()
+    if (r.ok) {
+      setNotice({ kind: 'ok', text: kind === 'export' ? `Yedek kaydedildi: ${r.path}` : 'Yedek yüklendi. Sayfa ayarları yenileniyor…' })
+      if (kind === 'import') setTimeout(() => window.location.reload(), 800)
+    } else if (r.error !== 'İptal edildi.') {
+      setNotice({ kind: 'error', text: r.error ?? 'İşlem başarısız.' })
+    }
+  }
+  const btn = 'flex items-center gap-2 rounded border border-val-line px-4 py-2 text-sm font-semibold hover:bg-val-raised'
+  return (
+    <section className="space-y-3 rounded border border-val-line bg-val-panel p-5">
+      <div>
+        <h2 className="text-base font-bold">Ayar yedeği</h2>
+        <p className="text-sm text-val-mute">
+          Ayarlarını, wishlist'ini ve nişangah kütüphaneni dosyaya kaydet veya başka bir bilgisayarda yükle. Telegram token'ı ve maç geçmişi yedeğe girmez. Yüklenen yedekte
+          instalock riski her zaman yeniden onaylatılır.
+        </p>
+      </div>
+      <div className="flex items-center gap-3">
+        <button onClick={() => void run('export')} className={btn}>
+          <Download size={15} /> Yedek al
+        </button>
+        <button onClick={() => void run('import')} className={btn}>
+          <Upload size={15} /> Yedekten yükle
+        </button>
+        {notice && <span className={`select-text text-sm ${notice.kind === 'ok' ? 'text-emerald-400' : 'text-val-red'}`}>{notice.text}</span>}
+      </div>
+    </section>
+  )
+}
+
 export default function SettingsPage(): JSX.Element {
   return (
     <div className="space-y-5">
       <h1 className="text-xl font-bold">Ayarlar</h1>
       <GeneralPanel />
+      <AiPanel />
+      <BackupPanel />
       <RiskPanel />
       <TelegramPanel />
     </div>

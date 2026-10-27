@@ -1,5 +1,6 @@
 import path from 'node:path'
 import { BrowserWindow, globalShortcut, screen } from 'electron'
+import type { OverlayCorner } from '@shared/types'
 import { log } from './logger'
 
 const WIDTH = 340
@@ -19,6 +20,8 @@ export class OverlayWindowManager {
   private shortcut = 'CommandOrControl+Tab'
   private enabled = true
   private gameActive = false
+  private corner: OverlayCorner = 'tr'
+  private opacity = 1
 
   /** Creates the always-hidden, click-through overlay window. */
   create(preloadPath: string): void {
@@ -48,9 +51,11 @@ export class OverlayWindowManager {
   }
 
   /** Applies user settings: on/off and the accelerator. */
-  configure(enabled: boolean, shortcut: string): void {
+  configure(enabled: boolean, shortcut: string, corner: OverlayCorner, opacity: number): void {
     this.enabled = enabled
     this.shortcut = shortcut
+    this.corner = corner
+    this.opacity = opacity
     this.unregister()
     this.refresh()
   }
@@ -88,8 +93,11 @@ export class OverlayWindowManager {
     const win = this.win
     if (!win || win.isDestroyed()) return
     if (!win.isVisible()) {
-      const { x, y, width } = screen.getPrimaryDisplay().bounds
-      win.setPosition(x + width - WIDTH - MARGIN, y + MARGIN)
+      const { x, y, width, height } = screen.getPrimaryDisplay().bounds
+      const left = this.corner.endsWith('l')
+      const top = this.corner.startsWith('t')
+      win.setPosition(left ? x + MARGIN : x + width - WIDTH - MARGIN, top ? y + MARGIN : y + height - HEIGHT - MARGIN)
+      win.setOpacity(this.opacity)
       win.showInactive()
     }
     if (this.hideTimer) clearTimeout(this.hideTimer)

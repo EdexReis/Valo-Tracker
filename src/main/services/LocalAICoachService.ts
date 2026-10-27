@@ -1,19 +1,28 @@
-import type { CoachResult } from '@shared/types'
-import { LM_STUDIO_URL } from '../constants'
+import type { AiTestResult, CoachResult } from '@shared/types'
 import { log } from '../logger'
 import type { CoachData } from './MatchService'
 
 const SYSTEM_PROMPT =
   'Sen sert, profesyonel ve disiplinli bir Valorant espor koçusun. Oyuncunun maç istatistiklerini inceleyip ona Türkçe olarak 3 maddeden oluşan, doğrudan hatasını yüzüne vuran ve nasıl gelişmesi gerektiğini söyleyen sert ama yapıcı bir koçluk tavsiyesi ver. Asla kibar olma, profesyonel bir koç gibi konuş.'
 
-const UNREACHABLE = 'AI Koç sunucusuna (LM Studio) ulaşılamadı. Lütfen yerel sunucuyu başlatın.'
+const UNREACHABLE = 'AI Koç sunucusuna (LM Studio / Ollama) ulaşılamadı. Lütfen yerel sunucuyu başlatın.'
 const TIMEOUT_MS = 180_000 // local models can be slow
 
+export interface AiConfig {
+  /** OpenAI-compatible base URL, e.g. http://127.0.0.1:1234/v1 */
+  url: string
+  /** empty = use whichever chat model the server reports first */
+  model: string
+}
+
+/** Talks to a local OpenAI-compatible server (LM Studio, Ollama...). The URL is restricted to this machine. */
 export class LocalAICoachService {
+  constructor(private config: () => AiConfig) {}
+
   /** Single-match coaching. Never throws. */
   getAICoaching(matchData: CoachData): Promise<CoachResult> {
     const label = `${matchData.map} · ${matchData.agent} · ${matchData.kills}/${matchData.deaths}/${matchData.assists}`
-    return this.ask(`Maç verilerim (JSON):\n${JSON.stringify(matchData)}`, label)
+    return this.ask(`Maç verilerim (JSON). "economy" alanı buy türlerine göre raund sayısı ve kazanılan raundları verir:\n${JSON.stringify(matchData)}`, label)
   }
 
   /** Coaching over the last ~20 ranked/unrated matches. Never throws. */
@@ -24,12 +33,27 @@ export class LocalAICoachService {
     )
   }
 
+  /** Checks that the server answers and reports which model would be used. */
+  async ping(): Promise<AiTestResult> {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 8000)
+    try {
+      const model = await this.loadedModel(ctrl.signal, true)
+      return { ok: true, model }
+    } catch (e) {
+      const err = e as Error
+      return { ok: false, error: err.name === 'AbortError' ? 'Sunucu yanıt vermedi.' : UNREACHABLE }
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
   private async ask(userContent: string, matchLabel: string): Promise<CoachResult> {
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS)
     try {
       const model = await this.loadedModel(ctrl.signal)
-      const res = await fetch(`${LM_STUDIO_URL}/chat/completions`, {
+      const res = await fetch(`${this.config().url}/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: ctrl.signal,
@@ -44,7 +68,7 @@ export class LocalAICoachService {
         })
       })
       if (!res.ok) {
-        return { ok: false, error: `LM Studio hata döndürdü (${res.status}). Sunucuda bir model yüklü mü?` }
+        return { ok: false, error: `AI sunucusu hata döndürdü (${res.status}). Bir model yüklü mü?` }
       }
       const json = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> }
       const text = json.choices?.[0]?.message?.content?.trim()
@@ -60,12 +84,17 @@ export class LocalAICoachService {
     }
   }
 
-  /** LM Studio answers with whatever model is loaded; use its id when the list is available. */
-  private async loadedModel(signal: AbortSignal): Promise<string> {
-    const res = await fetch(`${LM_STUDIO_URL}/models`, { signal })
-    if (!res.ok) return 'local-model'
+  /** The configured model, or the server's first chat model when none is set. */
+  private async loadedModel(signal: AbortSignal, strict = false): Promise<string> {
+    const { url, model } = this.config()
+    if (model && !strict) return model
+    const res = await fetch(`${url}/models`, { signal })
+    if (!res.ok) {
+      if (strict) throw new Error(`HTTP ${res.status}`)
+      return model || 'local-model'
+    }
     const json = (await res.json()) as { data?: Array<{ id: string }> }
     // The list can include embedding models; pick a chat model.
-    return json.data?.find((m) => !/embed/i.test(m.id))?.id ?? 'local-model'
+    return model || json.data?.find((m) => !/embed/i.test(m.id))?.id || 'local-model'
   }
 }

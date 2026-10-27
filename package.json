@@ -13,7 +13,8 @@
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "build:win": "electron-vite build && electron-builder --win --publish never",
     "release": "electron-vite build && electron-builder --win --publish always",
-    "release:auto": "npm version patch && git push --follow-tags"
+    "release:auto": "npm version patch && git push --follow-tags",
+    "test": "vitest run"
   },
   "dependencies": {
     "discord-rpc": "^4.0.1",
@@ -39,7 +40,8 @@
     "react-dom": "^18.3.1",
     "tailwindcss": "^3.4.15",
     "typescript": "^5.6.3",
-    "vite": "^5.4.11"
+    "vite": "^5.4.11",
+    "vitest": "^2.1.9"
   },
   "build": {
     "appId": "com.valotracker.app",

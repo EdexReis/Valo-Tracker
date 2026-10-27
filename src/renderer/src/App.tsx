@@ -3,6 +3,7 @@ import { TABS } from './tabs'
 import TitleBar from './components/TitleBar'
 import Sidebar from './components/Sidebar'
 import DodgeBanner from './components/DodgeBanner'
+import Onboarding from './components/Onboarding'
 import CompBanner from './components/CompBanner'
 import SuggestBanner from './components/SuggestBanner'
 
@@ -12,6 +13,7 @@ export default function App(): JSX.Element {
 
   return (
     <div className="flex h-full flex-col">
+      <Onboarding />
       <TitleBar />
       <div className="flex min-h-0 flex-1">
         <Sidebar tabs={TABS} active={active} onSelect={setActive} />

@@ -10,6 +10,7 @@ interface AppState {
   dodge: DodgeWarning | null
   comp: CompWarning | null
   appSettings: AppSettings
+  appLoaded: boolean
   updateApp: (patch: Partial<AppSettings>) => void
   lastCoach: CoachEvent | null
   stage: PregameStage | null
@@ -54,8 +55,15 @@ export function AppProvider({ children }: { children: ReactNode }): JSX.Element 
     goalWeeklyMatches: 10,
     goalWeeklyWins: 5,
     goalAvgVts: 500,
-    goalHsPercent: 25
+    goalHsPercent: 25,
+    musicControl: false,
+    onboardingDone: true, // avoids a flash of the wizard before the saved settings arrive
+    overlayCorner: 'tr',
+    overlayOpacity: 1,
+    aiUrl: 'http://127.0.0.1:1234/v1',
+    aiModel: ''
   })
+  const [appLoaded, setAppLoaded] = useState(false)
   const [lastCoach, setLastCoach] = useState<CoachEvent | null>(null)
   const [stage, setStage] = useState<PregameStage | null>(null)
   const [logs, setLogs] = useState<LogEntry[]>([])
@@ -69,7 +77,10 @@ export function AppProvider({ children }: { children: ReactNode }): JSX.Element 
     void api.getSessionRR().then(setSessionRR)
     void api.getDodgeWarning().then(setDodge)
     void api.getCompWarning().then(setComp)
-    void api.getAppSettings().then(setAppSettings)
+    void api.getAppSettings().then((s) => {
+      setAppSettings(s)
+      setAppLoaded(true)
+    })
     void api.getLogs().then(setLogs)
     // Assets may need a network fetch; retry until available.
     let cancelled = false
@@ -125,8 +136,8 @@ export function AppProvider({ children }: { children: ReactNode }): JSX.Element 
   const triggerPregame = useCallback(() => window.api.triggerPregame(), [])
 
   const value = useMemo(
-    () => ({ status, assets, settings, match, sessionRR, dodge, comp, appSettings, updateApp, lastCoach, stage, logs, scanning, updateSettings, scanMatch, triggerPregame }),
-    [status, assets, settings, match, sessionRR, dodge, comp, appSettings, updateApp, lastCoach, stage, logs, scanning, updateSettings, scanMatch, triggerPregame]
+    () => ({ status, assets, settings, match, sessionRR, dodge, comp, appSettings, appLoaded, updateApp, lastCoach, stage, logs, scanning, updateSettings, scanMatch, triggerPregame }),
+    [status, assets, settings, match, sessionRR, dodge, comp, appSettings, appLoaded, updateApp, lastCoach, stage, logs, scanning, updateSettings, scanMatch, triggerPregame]
   )
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

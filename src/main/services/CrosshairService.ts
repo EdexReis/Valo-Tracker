@@ -30,6 +30,13 @@ export class CrosshairService {
     return this.items
   }
 
+  replace(items: SavedCrosshair[]): SavedCrosshair[] {
+    this.items = items
+      .filter((c) => c && typeof c.name === 'string' && typeof c.code === 'string')
+      .map((c) => ({ id: c.id || randomUUID(), name: c.name.slice(0, 60), code: c.code.slice(0, 500) }))
+    return this.save()
+  }
+
   add(input: { name: string; code: string }): SavedCrosshair[] {
     const name = input.name.trim().slice(0, 60)
     const code = input.code.trim().slice(0, 500)

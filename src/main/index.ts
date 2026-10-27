@@ -1,8 +1,10 @@
 import path from 'node:path'
-import { writeFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, shell, Tray } from 'electron'
 import type {
+  AiTestResult,
   AppSettings,
+  BackupResult,
   AppStatus,
   CoachMode,
   CoachResult,
@@ -18,7 +20,7 @@ import { setRegion } from './constants'
 import { getLogHistory, log, logBus } from './logger'
 import { AuthService } from './services/AuthService'
 import { AssetCacheService } from './services/AssetCacheService'
-import { SettingsService } from './services/SettingsService'
+import { APP_DEFAULTS, SettingsService } from './services/SettingsService'
 import { WebSocketService } from './services/WebSocketService'
 import { PregameService } from './services/PregameService'
 import { StorefrontService } from './services/StorefrontService'
@@ -32,6 +34,7 @@ import { CrosshairService } from './services/CrosshairService'
 import { StoreArchiveService } from './services/StoreArchiveService'
 import { WeeklyReportService } from './services/WeeklyReportService'
 import { SessionMonitorService } from './services/SessionMonitorService'
+import { MusicControlService } from './services/MusicControlService'
 import { DiscordRPCService } from './services/DiscordRPCService'
 import { OverlayWindowManager } from './overlayWindowManager'
 import { LocalAICoachService } from './services/LocalAICoachService'
@@ -102,6 +105,17 @@ function createTray(): void {
   tray.on('click', showWindow)
 }
 
+/** The AI endpoint must stay on this machine, so match data never leaves it. */
+function safeAiUrl(u: string): string {
+  try {
+    const url = new URL(u)
+    if (/^https?:$/.test(url.protocol) && ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname)) return u.replace(/\/+$/, '')
+  } catch {
+    /* fall through */
+  }
+  return APP_DEFAULTS.aiUrl
+}
+
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
 function wire(): void {
@@ -113,6 +127,7 @@ function wire(): void {
   const overlay = new OverlayWindowManager()
   overlay.create(path.join(__dirname, '../preload/index.js'))
   const rpc = new DiscordRPCService()
+  const music = new MusicControlService()
   const title = (s: string): string =>
     s.toLocaleLowerCase('tr-TR').replace(/(^|\s)(\S)/g, (_m, sp: string, c: string) => sp + c.toLocaleUpperCase('tr-TR'))
   let matchStart: { id: string; ts: number } | null = null
@@ -151,7 +166,7 @@ function wire(): void {
   const crosshairs = new CrosshairService()
   const archive = new StoreArchiveService(assets)
   storefront.onFetched = (d) => archive.record(auth.puuid, d)
-  const coach = new LocalAICoachService()
+  const coach = new LocalAICoachService(() => ({ url: settings.getApp().aiUrl, model: settings.getApp().aiModel }))
   const tilt = new TiltGuardService(
     auth,
     mmr,
@@ -213,14 +228,19 @@ function wire(): void {
     ...s,
     overlayShortcut: SHORTCUT_OPTIONS.some((o) => o.value === s.overlayShortcut) ? s.overlayShortcut : SHORTCUT_OPTIONS[0].value,
     region: REGION_OPTIONS.some((o) => o.value === s.region) ? s.region : 'eu',
-    breakAfterHours: Math.min(12, Math.max(1, Math.round(Number(s.breakAfterHours) || 3)))
+    breakAfterHours: Math.min(12, Math.max(1, Math.round(Number(s.breakAfterHours) || 3))),
+    overlayCorner: ['tr', 'tl', 'br', 'bl'].includes(s.overlayCorner) ? s.overlayCorner : 'tr',
+    overlayOpacity: Math.min(1, Math.max(0.4, Number(s.overlayOpacity) || 1)),
+    aiUrl: safeAiUrl(String(s.aiUrl || APP_DEFAULTS.aiUrl)),
+    aiModel: String(s.aiModel ?? '').slice(0, 120)
   })
   const applyApp = (cfg: AppSettings): void => {
     setRegion(cfg.region)
     minimizeToTray = cfg.minimizeToTray
     if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: cfg.startWithWindows })
     rpc.setEnabled(cfg.discordRpc)
-    overlay.configure(cfg.overlayEnabled, cfg.overlayShortcut)
+    if (!cfg.musicControl && music.isHoldingPause) void music.resume() // switched off mid-match: give the music back
+    overlay.configure(cfg.overlayEnabled, cfg.overlayShortcut, cfg.overlayCorner, cfg.overlayOpacity)
   }
   applyApp(settings.getApp())
 
@@ -276,6 +296,12 @@ function wire(): void {
       void afterMatch()
     }
     pushStatus()
+    if (settings.getApp().musicControl) {
+      // Match found -> pause. Back in the lobby (or Valorant closed) -> resume what we paused.
+      // Modes without agent select (Deathmatch...) go straight to INGAME; pause() ignores a second call.
+      if ((s === 'PREGAME' && prev !== 'PREGAME') || (s === 'INGAME' && prev !== 'INGAME')) void music.pause()
+      else if ((s === 'MENUS' || s === 'UNKNOWN') && (prev === 'PREGAME' || prev === 'INGAME')) void music.resume()
+    }
     if (s === 'PREGAME' && prev !== 'PREGAME') void telegram.notifyMatchFound()
     if (s === 'MENUS') rpc.updatePresence({ details: 'Lobide Bekliyor', state: 'Ana menüde' })
     else if (s === 'PREGAME') rpc.updatePresence({ details: 'Ajan Seçimi', state: 'Ajan kilitleniyor...' })
@@ -348,6 +374,58 @@ function wire(): void {
   ipcMain.handle(IPC.getStoreArchive, () => archive.list(account()))
   ipcMain.handle(IPC.getMatchDetail, (_e, id: string) => matches.getMatchDetail(String(id)))
   ipcMain.handle(IPC.getWeeklyReport, (_e, send: boolean) => weekly.report(!!send))
+  ipcMain.handle(IPC.exportLogs, async (): Promise<ExportResult> => {
+    const pick = await dialog.showSaveDialog(win!, { defaultPath: `valo-tracker-gunluk-${new Date().toISOString().slice(0, 10)}.txt` })
+    if (pick.canceled || !pick.filePath) return { ok: false, error: 'İptal edildi.' }
+    try {
+      const text = getLogHistory()
+        .map((l) => `${new Date(l.time).toISOString()} [${l.level}] [${l.source}] ${l.message}`)
+        .join('\r\n')
+      await writeFile(pick.filePath, text, 'utf8')
+      return { ok: true, path: pick.filePath }
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
+  })
+  // Backup holds preferences only: no Telegram token, no match history.
+  ipcMain.handle(IPC.exportBackup, async (): Promise<BackupResult> => {
+    const pick = await dialog.showSaveDialog(win!, {
+      defaultPath: `valo-tracker-yedek-${new Date().toISOString().slice(0, 10)}.json`,
+      filters: [{ name: 'JSON', extensions: ['json'] }]
+    })
+    if (pick.canceled || !pick.filePath) return { ok: false, error: 'İptal edildi.' }
+    try {
+      const body = { version: 1, app: settings.getApp(), instalock: settings.get(), crosshairs: crosshairs.list(), wishlist: wishlist.uuids() }
+      await writeFile(pick.filePath, JSON.stringify(body, null, 2), 'utf8')
+      return { ok: true, path: pick.filePath }
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
+  })
+  ipcMain.handle(IPC.importBackup, async (): Promise<BackupResult> => {
+    const pick = await dialog.showOpenDialog(win!, { properties: ['openFile'], filters: [{ name: 'JSON', extensions: ['json'] }] })
+    if (pick.canceled || !pick.filePaths[0]) return { ok: false, error: 'İptal edildi.' }
+    try {
+      const data = JSON.parse(await readFile(pick.filePaths[0], 'utf8')) as {
+        app?: AppSettings
+        instalock?: InstalockSettings
+        crosshairs?: Array<{ id: string; name: string; code: string }>
+        wishlist?: string[]
+      }
+      if (!data || typeof data !== 'object' || data.app === undefined) return { ok: false, error: 'Bu bir Valo Tracker yedeği değil.' }
+      // A file from elsewhere must not switch the risky features on: the risk acknowledgement is always asked again.
+      const saved = settings.saveApp(sanitizeApp({ ...APP_DEFAULTS, ...data.app, instalockRiskAck: false, onboardingDone: true }))
+      if (data.instalock) settings.save(data.instalock)
+      if (Array.isArray(data.crosshairs)) crosshairs.replace(data.crosshairs)
+      if (Array.isArray(data.wishlist)) wishlist.replace(data.wishlist)
+      applyApp(saved)
+      telegram.refreshListener()
+      return { ok: true, path: pick.filePaths[0] }
+    } catch {
+      return { ok: false, error: 'Dosya okunamadı veya geçersiz.' }
+    }
+  })
+  ipcMain.handle(IPC.testAI, (): Promise<AiTestResult> => coach.ping())
   ipcMain.handle(IPC.getTelegram, () => settings.getTelegramView())
   ipcMain.handle(IPC.saveTelegram, (_e, input: TelegramInput) => {
     const view = settings.saveTelegram(input)
@@ -388,6 +466,7 @@ function wire(): void {
     monitor.stop()
     weekly.stop()
     telegram.stop()
+    if (music.isHoldingPause) void music.resume()
     rpc.destroy()
     overlay.destroy()
     globalShortcut.unregisterAll()

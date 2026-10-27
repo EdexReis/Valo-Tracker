@@ -23,7 +23,13 @@ export const APP_DEFAULTS: AppSettings = {
   goalWeeklyMatches: 10,
   goalWeeklyWins: 5,
   goalAvgVts: 500,
-  goalHsPercent: 25
+  goalHsPercent: 25,
+  musicControl: false,
+  onboardingDone: false,
+  overlayCorner: 'tr',
+  overlayOpacity: 1,
+  aiUrl: 'http://127.0.0.1:1234/v1',
+  aiModel: ''
 }
 
 interface TelegramStored {

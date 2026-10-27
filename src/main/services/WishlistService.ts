@@ -37,6 +37,16 @@ export class WishlistService {
     }
   }
 
+  /** Raw skin uuids, for backups. */
+  uuids(): string[] {
+    return [...this.data.wishlist]
+  }
+
+  replace(uuids: string[]): void {
+    this.data.wishlist = uuids.filter((u) => typeof u === 'string')
+    this.save()
+  }
+
   list(): SkinHit[] {
     return this.data.wishlist
       .map((id) => this.assets.skinOf(id))

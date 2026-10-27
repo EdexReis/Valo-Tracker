@@ -43,6 +43,8 @@ export interface CoachData {
   vts: VtsResult | null
   /** where and when the player died: round, seconds into the round, world coordinates */
   deathLocations: Array<{ round: number; secondsIntoRound: number; x: number | null; y: number | null }>
+  /** rounds and wins per buy type, plus mismatched buys */
+  economy: EconSummary | null
 }
 
 export class MatchService {
@@ -304,6 +306,7 @@ export class MatchService {
     if (!latest) return null
 
     const [d, s] = await Promise.all([this.rawDetails(latest.matchId), this.getMatchDetails(latest.matchId, puuid, latest.queueId)])
+    const detail = await this.getMatchDetail(latest.matchId).catch(() => null)
     const kills: any[] = Array.isArray(d.kills) ? d.kills : []
     const deathLocations = kills
       .filter((k) => k.victim === puuid)
@@ -335,7 +338,8 @@ export class MatchService {
       firstBloodRate: r2(s.firstBloods / s.rounds),
       firstDeathRate: r2(s.firstDeaths / s.rounds),
       vts: s.vts,
-      deathLocations
+      deathLocations,
+      economy: detail?.econ ?? null
     }
   }
 }

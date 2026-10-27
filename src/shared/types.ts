@@ -303,6 +303,17 @@ export interface AppSettings {
   goalWeeklyWins: number
   goalAvgVts: number
   goalHsPercent: number
+  /** pause music when a match is found and resume it when back in the lobby */
+  musicControl: boolean
+  /** first-run wizard finished */
+  onboardingDone: boolean
+  overlayCorner: OverlayCorner
+  /** 0.4-1 */
+  overlayOpacity: number
+  /** local OpenAI-compatible server for the AI coach (loopback addresses only) */
+  aiUrl: string
+  /** empty = first chat model the server reports */
+  aiModel: string
 }
 
 export interface RRPoint {
@@ -364,6 +375,20 @@ export interface CoachEvent {
   result: CoachResult
 }
 
+export type OverlayCorner = 'tr' | 'tl' | 'br' | 'bl'
+
+export interface BackupResult {
+  ok: boolean
+  path?: string
+  error?: string
+}
+
+export interface AiTestResult {
+  ok: boolean
+  model?: string
+  error?: string
+}
+
 export type WindowAction = 'minimize' | 'maximize' | 'close'
 
 export interface ValoApi {
@@ -391,6 +416,10 @@ export interface ValoApi {
   getMatchDetail(matchId: string): Promise<MatchDetail>
   /** Builds the weekly report text; with send=true it is also pushed to notifications. */
   getWeeklyReport(send: boolean): Promise<string>
+  exportLogs(): Promise<ExportResult>
+  exportBackup(): Promise<BackupResult>
+  importBackup(): Promise<BackupResult>
+  testAI(): Promise<AiTestResult>
   getSessionRR(): Promise<SessionRR>
   getTelegram(): Promise<TelegramSettingsView>
   saveTelegram(input: TelegramInput): Promise<TelegramSettingsView>
